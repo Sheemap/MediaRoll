@@ -1,0 +1,16 @@
+{
+  "name": "breadbot",
+  "version": "1.0.0",
+  "description": "Discord bot for creating a personalized database of image",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Seka#2893",
+  "license": "ISC",
+  "dependencies": {
+    "@types/node": "^13.1.8",
+    "discord.js": "^11.5.1",
+    "typescript-eslint-parser": "^22.0.0"
+  }
+}
