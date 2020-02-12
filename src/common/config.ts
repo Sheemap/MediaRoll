@@ -6,6 +6,7 @@ export class MediaConfig {
 	Config: ChannelConfig;
 
 	constructor(configId: any) {
+		console.log(typeof configId == "string");
 		if (typeof configId == "number") {
 			knex<ChannelConfig>("ChannelConfig")
 				.where("ChannelConfigId", configId)
@@ -15,7 +16,8 @@ export class MediaConfig {
 				});
 		} else if (typeof configId == "string") {
 			knex<ChannelConfig>("ChannelConfig")
-				.where("MediaChannelId", configId)
+				.whereNotNull("RollChannelId")
+				.andWhere("MediaChannelId", configId)
 				.orWhere("RollChannelId", configId)
 				.first()
 				.then(configRow => {

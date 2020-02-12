@@ -109,10 +109,7 @@ export class ActionHandler {
 		ProcessUser(msg.member);
 
 		for (let x in this.comms) {
-			if (
-				msg.content == x &&
-				typeof this.comms[x].OnMessage !== "undefined"
-			) {
+			if (typeof this.comms[x].OnMessage !== "undefined") {
 				this.comms[x].OnMessage(msg);
 			}
 		}
