@@ -14,6 +14,14 @@ client.on("message", message => {
 	actionHandler.OnMessage(message);
 });
 
+client.on("messageReactionAdd", reaction => {
+	actionHandler.OnReactionAdd(reaction);
+});
+
+client.on("messageReactionRemove", reaction => {
+	actionHandler.OnReactionDelete(reaction);
+});
+
 client.login(token);
 
 exports.client = client;
