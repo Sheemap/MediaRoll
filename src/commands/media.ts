@@ -4,6 +4,7 @@ import {
 	MessageReaction,
 	Attachment,
 	MessageAttachment,
+	Channel,
 } from "discord.js";
 import { MediaConfig } from "../common/config";
 import { GetUserIdFromMessage, GetTimestamp } from "../common/utilities";
@@ -49,82 +50,103 @@ export function OnReactionAdd(reaction: MessageReaction) {}
 export function OnReactionDelete(reaction: MessageReaction) {}
 
 function Configure(msg: Message, args: string[]) {
+	if (!msg.member.permissions.has("MANAGE_CHANNELS", true)) {
+		msg.reply(
+			"You are not authorized to configure the media channels. You must have a role that has the 'Manage Channels' permission."
+		);
+		return;
+	}
 	if (typeof config === "undefined") {
-		GetUserIdFromMessage(msg, userId => {
-			knex<ChannelConfig>("ChannelConfig")
-				.whereNull("RollChannelId")
-				.andWhere("CreatedBy", userId)
-				.first()
-				.then(row => {
-					if (typeof row === "undefined") {
-						console.log("asdf");
-						let chanConfig = GetSettingsFromArgs(args);
-						console.log("asdf");
-
-						try {
-							chanConfig = chanConfig as string[];
-							if (chanConfig.length > 0) {
-								msg.reply(
-									`Argument error! Occured at: ${chanConfig.join(
-										", "
-									)}`
-								);
-								return;
-							}
-						} catch {}
-
-						chanConfig = chanConfig as ChannelConfig;
-						chanConfig.MediaChannelId = msg.channel.id;
-						chanConfig.CreatedBy = userId;
-						chanConfig.DateCreated = GetTimestamp();
-						chanConfig.DateUpdated = GetTimestamp();
-						knex<ChannelConfig>("ChannelConfig")
-							.insert(chanConfig)
-							.then(() => {
-								logger.info(
-									`Created initial channel config. Waiting for next message from ${userId}`
-								);
-								msg.reply(
-									"Channel set as the media submit channel!\n\nPlease run the same command in the channel you want to roll media."
-								);
-							});
-					} else {
-						knex<ChannelConfig>("ChannelConfig")
-							.update({
-								RollChannelId: msg.channel.id,
-								DateUpdated: GetTimestamp(),
-							})
-							.then(() => {
-								logger.info(
-									`Updated channel config. ChannelConfig completed!`
-								);
-								msg.reply(
-									`Channel config completed! This channel will now accept the ${prefix}roll command`
-								);
-							});
-					}
-				});
-		});
+		ConfigureNew(msg, args);
+	} else {
+		ConfigureExisting(msg, args);
 	}
 }
 
-function GetSettingsFromArgs(args: string[]) {
-	let errors: string[] = [];
-	let chanConfig: ChannelConfig = {
-		ChannelConfigId: null,
-		MediaChannelId: null,
-		RollChannelId: null,
-		CreatedBy: null,
-		DateCreated: null,
-		DateUpdated: null,
-		Prefix: DEFAULTPREFIX,
-		BufferPercentage: 0.75,
-		MaximumPoints: 20,
-		MinimumPoints: -5,
-		RemoveAtMinimum: 1,
-	};
-	console.log("asdfdd");
+function ConfigureExisting(msg: Message, args: string[]) {
+	GetUserIdFromMessage(msg, userId => {
+		let chanConfig = GetSettingsFromArgs(config, args);
+		try {
+			chanConfig = chanConfig as string[];
+			if (chanConfig.length > 0) {
+				msg.reply(
+					`Argument error! Occured at: ${chanConfig.join(", ")}`
+				);
+				return;
+			}
+		} catch {}
+		let channelConfig = chanConfig as ChannelConfig;
+		channelConfig.DateUpdated = GetTimestamp();
 
+		knex<ChannelConfig>("ChannelConfig")
+			.update(channelConfig)
+			.then(() => {
+				logger.info(
+					`User ${userId} updated channel config. ConfigId: ${channelConfig.ChannelConfigId}`
+				);
+				msg.reply(`Updated channel config!`);
+			});
+	});
+}
+
+function ConfigureNew(msg: Message, args: string[]) {
+	GetUserIdFromMessage(msg, userId => {
+		knex<ChannelConfig>("ChannelConfig")
+			.whereNull("RollChannelId")
+			.andWhere("CreatedBy", userId)
+			.first()
+			.then(row => {
+				if (typeof row === "undefined") {
+					let chanConfig = GetSettingsOrDefaultFromArgs(args);
+
+					try {
+						chanConfig = chanConfig as string[];
+						if (chanConfig.length > 0) {
+							msg.reply(
+								`Argument error! Occured at: ${chanConfig.join(
+									", "
+								)}`
+							);
+							return;
+						}
+					} catch {}
+
+					chanConfig = chanConfig as ChannelConfig;
+					chanConfig.MediaChannelId = msg.channel.id;
+					chanConfig.CreatedBy = userId;
+					chanConfig.DateCreated = GetTimestamp();
+					chanConfig.DateUpdated = GetTimestamp();
+					knex<ChannelConfig>("ChannelConfig")
+						.insert(chanConfig)
+						.then(() => {
+							logger.info(
+								`Created initial channel config. Waiting for next message from ${userId}`
+							);
+							msg.reply(
+								"Channel set as the media submit channel!\n\nPlease run the same command in the channel you want to roll media."
+							);
+						});
+				} else {
+					knex<ChannelConfig>("ChannelConfig")
+						.update({
+							RollChannelId: msg.channel.id,
+							DateUpdated: GetTimestamp(),
+						})
+						.then(() => {
+							logger.info(
+								`Updated channel config. ChannelConfig completed!`
+							);
+							msg.reply(
+								`Channel config completed! This channel will now accept the ${prefix}roll command`
+							);
+						});
+				}
+			});
+	});
+}
+
+function GetSettingsFromArgs(chanConfig: ChannelConfig, args: string[]) {
+	let errors: string[] = [];
 	args.forEach(a => {
 		try {
 			switch (a) {
@@ -182,6 +204,23 @@ function GetSettingsFromArgs(args: string[]) {
 	} else {
 		return chanConfig;
 	}
+}
+
+function GetSettingsOrDefaultFromArgs(args: string[]) {
+	let chanConfig: ChannelConfig = {
+		ChannelConfigId: null,
+		MediaChannelId: null,
+		RollChannelId: null,
+		CreatedBy: null,
+		DateCreated: null,
+		DateUpdated: null,
+		Prefix: DEFAULTPREFIX,
+		BufferPercentage: 0.75,
+		MaximumPoints: 20,
+		MinimumPoints: -5,
+		RemoveAtMinimum: 1,
+	};
+	return GetSettingsFromArgs(chanConfig, args);
 }
 
 function RollMedia(msg: Message) {}
