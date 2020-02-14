@@ -1,17 +1,13 @@
 {
-    "compilerOptions": {
-      "target": "es6",
-      "module": "commonjs",
-      "outDir": "dist",
-      "sourceMap": true,
-      "removeComments": true,
-      "preserveConstEnums": true,
-    },
-    "include": [
-        "src/**/*",
-    ],
-    "exclude": [
-        "node_modules",
-        "**/*.spec.ts",
-    ]
-  }
+	"compilerOptions": {
+		"target": "es6",
+		"module": "commonjs",
+		"outDir": "dist",
+		"rootDir": "src",
+		"sourceMap": true,
+		"removeComments": true,
+		"preserveConstEnums": true
+	},
+	"include": ["src/**/*"],
+	"exclude": ["node_modules", "**/*.spec.ts"]
+}

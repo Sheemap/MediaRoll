@@ -8,6 +8,7 @@ const knex = knexjs({
 	connection: {
 		filename: sqliteFileLocation,
 	},
+	debug: true,
 	useNullAsDefault: true,
 	log: {
 		warn(message) {

@@ -1,16 +1,9 @@
-import knex, { DbServer, DbUser } from "../common/db";
-import {
-	Message,
-	MessageReaction,
-	Attachment,
-	MessageAttachment,
-	Channel,
-} from "discord.js";
-import { MediaConfig } from "../common/config";
+import knex from "../common/db";
+import { Message, MessageReaction } from "discord.js";
 import { GetUserIdFromMessage, GetTimestamp } from "../common/utilities";
 import { logger } from "../common/logger";
-import { type } from "os";
 
+const sleep = ms => new Promise(r => setTimeout(r, 100000));
 const DEFAULTPREFIX = "!";
 
 var config: ChannelConfig;
@@ -28,14 +21,13 @@ export function OnMessage(msg: Message) {
 		.then(configRow => {
 			config = configRow;
 			prefix = config?.Prefix || DEFAULTPREFIX;
-			console.log(args);
 			switch (args[0]) {
 				case `${prefix}mediaconfig`:
 					Configure(msg, args);
 					break;
 
 				case `${prefix}roll`:
-					RollMedia(msg);
+					RollMedia(msg, args);
 					break;
 
 				default:
@@ -187,11 +179,6 @@ function GetSettingsFromArgs(chanConfig: ChannelConfig, args: string[]) {
 					}
 					chanConfig.MinimumPoints = min;
 					break;
-
-				case "-dr":
-				case "--dont-remove-at-minimum":
-					chanConfig.RemoveAtMinimum = 0;
-					break;
 			}
 		} catch {
 			errors.push(a);
@@ -211,6 +198,7 @@ function GetSettingsOrDefaultFromArgs(args: string[]) {
 		ChannelConfigId: null,
 		MediaChannelId: null,
 		RollChannelId: null,
+		CurrentlyRolling: 0,
 		CreatedBy: null,
 		DateCreated: null,
 		DateUpdated: null,
@@ -218,12 +206,124 @@ function GetSettingsOrDefaultFromArgs(args: string[]) {
 		BufferPercentage: 0.75,
 		MaximumPoints: 20,
 		MinimumPoints: -5,
-		RemoveAtMinimum: 1,
 	};
 	return GetSettingsFromArgs(chanConfig, args);
 }
 
-function RollMedia(msg: Message) {}
+function RollMedia(msg: Message, args: string[]) {
+	if (
+		typeof config === "undefined" ||
+		msg.channel.id !== config.RollChannelId
+	) {
+		msg.reply("Rolling is not configured in this channel.");
+		return;
+	}
+	if (config.CurrentlyRolling == 1) {
+		msg.reply("Cant roll twice at once! Wait for the other roll to end.");
+		return;
+	}
+
+	let count = Math.abs(parseInt(args[1]) || 1);
+	let interval = Math.abs(parseInt(args[2]) || 3);
+	knex<ChannelConfig>("ChannelConfig")
+		.update({ CurrentlyRolling: 1 })
+		.then(() => {
+			msg.channel.send(
+				`Rolling ${count} medias with an interval of ${interval} seconds`
+			);
+			logger.info(
+				`Rolling ${count} medias with an interval of ${interval} seconds in channel config ${config.ChannelConfigId}`
+			);
+			SelectRollableMedia(SendMedia, msg, interval, count, 0);
+		});
+}
+
+function SendMedia(
+	media: Media,
+	msg: Message,
+	interval: number,
+	count: number,
+	currentCount: number
+) {
+	if (media.Url.indexOf("cdn.discordapp.com") != -1) {
+		msg.channel.send({ file: media.Url }).then(sentMsg => {
+			SaveMediaRoll(media, sentMsg as Message, msg);
+		});
+	} else {
+		msg.channel.send(media.Url).then(sentMsg => {
+			SaveMediaRoll(media, sentMsg as Message, msg);
+		});
+	}
+	if (currentCount < count)
+		setTimeout(function() {
+			SelectRollableMedia(SendMedia, msg, interval, count, currentCount);
+		}, interval * 1000);
+	else {
+		knex<ChannelConfig>("ChannelConfig")
+			.update("CurrentlyRolling", 0)
+			.where("ChannelConfigId", config.ChannelConfigId)
+			.then(() => logger.info("Finished roll"));
+	}
+}
+
+function SaveMediaRoll(media: Media, mediaMsg: Message, originalMsg: Message) {
+	GetUserIdFromMessage(originalMsg, userId => {
+		knex<MediaRoll>("MediaRoll")
+			.insert({
+				MediaId: media.MediaId,
+				MessageId: mediaMsg.id,
+				CreatedBy: userId,
+				DateCreated: GetTimestamp(),
+			})
+			.then(() =>
+				logger.debug(`Saved MediaRoll entry from userId ${userId}`)
+			);
+	});
+}
+
+function SelectRollableMedia(
+	callback: Function,
+	msg: Message,
+	interval: number,
+	count: number,
+	currentCount: number
+) {
+	let bufferCount = 0;
+	currentCount++;
+
+	knex<Media>("Media")
+		.select("Media.MediaId")
+		.sum("IsUpvote as Points")
+		.where("ConfigId", config.ChannelConfigId)
+		.leftJoin("MediaVote", "Media.MediaId", "MediaVote.MediaId")
+		.groupBy("MediaVote.MediaId")
+		.having("Points", ">", config.MinimumPoints)
+		.orHavingRaw("`Points` is null")
+		.then(rows => {
+			bufferCount = Math.round(rows.length * config.BufferPercentage);
+			if (bufferCount >= rows.length) {
+				bufferCount = rows.length - 1;
+			}
+			knex<Media>("Media")
+				.select("Media.MediaId", "Media.Url")
+				.leftJoin(
+					knex.raw(
+						"(select `MediaId`, `MediaRollId` from `MediaRoll` order by `MediaRollId` desc limit ?) MediaRoll",
+						[bufferCount]
+					),
+					"Media.MediaId",
+					"MediaRoll.MediaId"
+				)
+				.whereNull("MediaRoll.MediaRollId")
+				.then(rollableMedias => {
+					var media: Media =
+						rollableMedias[
+							Math.floor(Math.random() * rollableMedias.length)
+						];
+					callback(media, msg, interval, count, currentCount);
+				});
+		});
+}
 
 function ProcessMessage(msg: Message) {
 	if (msg.channel.id != config?.MediaChannelId) return;
@@ -250,7 +350,7 @@ function SaveMedia(url: string, messageId: string, userId: number) {
 			CreatedBy: userId,
 			DateCreated: GetTimestamp(),
 		})
-		.then(() => logger.info(`Saved meme sent by userId ${userId}`));
+		.then(() => logger.info(`Saved media sent by userId ${userId}`));
 }
 
 // Initialize tables
@@ -263,7 +363,7 @@ export interface ChannelConfig {
 	BufferPercentage: number;
 	MaximumPoints: number;
 	MinimumPoints: number;
-	RemoveAtMinimum: number;
+	CurrentlyRolling: number;
 	CreatedBy: number;
 	DateCreated: number;
 	DateUpdated: number;
@@ -281,7 +381,7 @@ knex.schema.hasTable("ChannelConfig").then(exists => {
 			t.decimal("BufferPercentage");
 			t.integer("MaximumPoints");
 			t.integer("MinimumPoints");
-			t.integer("RemoveAtMinimum");
+			t.integer("CurrentlyRolling");
 			t.integer("CreatedBy");
 			t.integer("DateCreated");
 			t.integer("DateUpdated");
