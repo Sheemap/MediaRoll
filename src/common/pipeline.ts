@@ -122,7 +122,7 @@ export class ActionHandler {
 
 		for (let x in this.comms) {
 			if (typeof this.comms[x].OnReactionAdd !== "undefined") {
-				this.comms[x].OnReactionAdd(reaction);
+				this.comms[x].OnReactionAdd(reaction, user);
 			}
 		}
 	}
@@ -133,7 +133,7 @@ export class ActionHandler {
 
 		for (let x in this.comms) {
 			if (typeof this.comms[x].OnReactionDelete !== "undefined") {
-				this.comms[x].OnReactionDelete(reaction);
+				this.comms[x].OnReactionDelete(reaction, user);
 			}
 		}
 	}

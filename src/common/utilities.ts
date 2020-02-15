@@ -19,3 +19,22 @@ export function GetUserIdFromMessage(msg: Message, callback: Function) {
 				});
 		});
 }
+
+export function GetUserIdFromDiscordId(
+	serverDiscordId: string,
+	userDiscordId: string,
+	callback: Function
+) {
+	knex<DbServer>("Server")
+		.where("DiscordId", serverDiscordId)
+		.first()
+		.then(serverRow => {
+			knex<DbUser>("User")
+				.where("DiscordId", userDiscordId)
+				.where("ServerId", serverRow.ServerId)
+				.first()
+				.then(userRow => {
+					callback(userRow.UserId);
+				});
+		});
+}

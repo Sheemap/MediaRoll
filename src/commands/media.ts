@@ -1,9 +1,12 @@
 import knex from "../common/db";
-import { Message, MessageReaction } from "discord.js";
-import { GetUserIdFromMessage, GetTimestamp } from "../common/utilities";
+import { Message, MessageReaction, User } from "discord.js";
+import {
+	GetUserIdFromMessage,
+	GetTimestamp,
+	GetUserIdFromDiscordId,
+} from "../common/utilities";
 import { logger } from "../common/logger";
 
-const sleep = ms => new Promise(r => setTimeout(r, 100000));
 const DEFAULTPREFIX = "!";
 
 var config: ChannelConfig;
@@ -37,9 +40,90 @@ export function OnMessage(msg: Message) {
 		});
 }
 
-export function OnReactionAdd(reaction: MessageReaction) {}
+export function OnReactionAdd(reaction: MessageReaction, user: User) {
+	if (typeof config === "undefined") return;
 
-export function OnReactionDelete(reaction: MessageReaction) {}
+	if (reaction.emoji.toString() === config.UpvoteEmoji) {
+		AddMediaVoteFromMessage(true, reaction.message, user);
+		return;
+	}
+
+	if (reaction.emoji.toString() === config.DownvoteEmoji) {
+		AddMediaVoteFromMessage(false, reaction.message, user);
+		return;
+	}
+}
+
+export function OnReactionDelete(reaction: MessageReaction, user: User) {
+	if (typeof config === "undefined") return;
+
+	if (reaction.emoji.toString() === config.UpvoteEmoji) {
+		DeleteMediaVoteFromMessage(true, reaction.message, user);
+		return;
+	}
+
+	if (reaction.emoji.toString() === config.DownvoteEmoji) {
+		DeleteMediaVoteFromMessage(false, reaction.message, user);
+		return;
+	}
+}
+
+function DeleteMediaVoteFromMessage(
+	IsUpvote: boolean,
+	msg: Message,
+	user: User
+) {
+	GetUserIdFromDiscordId(msg.guild.id, user.id, userId => {
+		let voteWeight = IsUpvote ? 1 : -1;
+		knex<MediaVote>("MediaVote")
+			.select("MediaVoteId")
+			.where("MessageId", msg.id)
+			.andWhere("CreatedBy", userId)
+			.andWhere("IsUpvote", voteWeight)
+			.orderBy("MediaVoteId", "desc")
+			.first()
+			.then(mediaVote => {
+				if (typeof mediaVote === "undefined") return;
+
+				knex<MediaVote>("MediaVote")
+					.where("MediaVoteId", mediaVote.MediaVoteId)
+					.delete()
+					.then(() => {});
+			});
+	});
+}
+
+function AddMediaVoteFromMessage(IsUpvote: boolean, msg: Message, user: User) {
+	GetUserIdFromDiscordId(msg.guild.id, user.id, userId => {
+		knex<MediaRoll>("MediaRoll")
+			.select("MediaId")
+			.where("MessageId", msg.id)
+			.first()
+			.then(media => {
+				if (typeof media === "undefined") {
+					logger.warn(
+						`Unknown error occured. Tried to add a vote on a non-existant message. MessageId: ${msg.id}, UserId: ${userId}`
+					);
+					return;
+				}
+				let voteWeight = IsUpvote ? 1 : -1;
+
+				knex<MediaVote>("MediaVote")
+					.insert({
+						MediaId: media.MediaId,
+						MessageId: msg.id,
+						IsUpvote: voteWeight,
+						CreatedBy: userId,
+						DateCreated: GetTimestamp(),
+					})
+					.then(() => {
+						logger.info(
+							`Recorded vote of ${voteWeight} on media ${media.MediaId} by userId ${userId}`
+						);
+					});
+			});
+	});
+}
 
 function Configure(msg: Message, args: string[]) {
 	if (!msg.member.permissions.has("MANAGE_CHANNELS", true)) {
@@ -178,11 +262,23 @@ function GetSettingsFromArgs(chanConfig: ChannelConfig, args: string[]) {
 					if (isNaN(min)) {
 						errors.push(a);
 						errors.push(args[args.indexOf(a) + 1]);
-					} else if (min > 0) {
+					} else if (min >= 0) {
 						errors.push(a);
-						errors.push("Minimum points must be less than than 1");
+						errors.push("Minimum points must be less than than 0");
 					}
 					chanConfig.MinimumPoints = min;
+					break;
+
+				case "-u":
+				case "--upvote-emoji":
+					let upEmoji = args[args.indexOf(a) + 1];
+					chanConfig.UpvoteEmoji = upEmoji;
+					break;
+
+				case "-d":
+				case "--downvote-emoji":
+					let downEmoji = args[args.indexOf(a) + 1];
+					chanConfig.DownvoteEmoji = downEmoji;
 					break;
 			}
 		} catch {
@@ -211,6 +307,8 @@ function GetSettingsOrDefaultFromArgs(args: string[]) {
 		BufferPercentage: 0.75,
 		MaximumPoints: 20,
 		MinimumPoints: -5,
+		UpvoteEmoji: "👍",
+		DownvoteEmoji: "👎",
 	};
 	return GetSettingsFromArgs(chanConfig, args);
 }
@@ -346,7 +444,7 @@ function SelectRollableMedia(
 						}
 					});
 					let media: Media =
-						rollableMedias[
+						pointWeightedMedias[
 							Math.floor(
 								Math.random() * pointWeightedMedias.length
 							)
@@ -394,6 +492,8 @@ export interface ChannelConfig {
 	BufferPercentage: number;
 	MaximumPoints: number;
 	MinimumPoints: number;
+	UpvoteEmoji: string;
+	DownvoteEmoji: string;
 	CurrentlyRolling: number;
 	CreatedBy: number;
 	DateCreated: number;
@@ -412,6 +512,8 @@ knex.schema.hasTable("ChannelConfig").then(exists => {
 			t.decimal("BufferPercentage");
 			t.integer("MaximumPoints");
 			t.integer("MinimumPoints");
+			t.integer("UpvoteEmoji");
+			t.integer("DownvoteEmoji");
 			t.integer("CurrentlyRolling");
 			t.integer("CreatedBy");
 			t.integer("DateCreated");
