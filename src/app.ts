@@ -14,12 +14,12 @@ client.on("message", message => {
 	actionHandler.OnMessage(message);
 });
 
-client.on("messageReactionAdd", reaction => {
-	actionHandler.OnReactionAdd(reaction);
+client.on("messageReactionAdd", (reaction, user) => {
+	actionHandler.OnReactionAdd(reaction, user);
 });
 
-client.on("messageReactionRemove", reaction => {
-	actionHandler.OnReactionDelete(reaction);
+client.on("messageReactionRemove", (reaction, user) => {
+	actionHandler.OnReactionDelete(reaction, user);
 });
 
 client.login(token);

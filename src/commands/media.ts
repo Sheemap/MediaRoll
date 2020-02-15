@@ -72,6 +72,7 @@ function ConfigureExisting(msg: Message, args: string[]) {
 
 		knex<ChannelConfig>("ChannelConfig")
 			.update(channelConfig)
+			.where("ChannelConfigId", channelConfig.ChannelConfigId)
 			.then(() => {
 				logger.info(
 					`User ${userId} updated channel config. ConfigId: ${channelConfig.ChannelConfigId}`
@@ -124,6 +125,7 @@ function ConfigureNew(msg: Message, args: string[]) {
 							RollChannelId: msg.channel.id,
 							DateUpdated: GetTimestamp(),
 						})
+						.where("ChannelConfigId", row.ChannelConfigId)
 						.then(() => {
 							logger.info(
 								`Updated channel config. ChannelConfig completed!`
@@ -223,19 +225,17 @@ function RollMedia(msg: Message, args: string[]) {
 		return;
 	}
 
+	SetCurrentlyRolling(config.ChannelConfigId, 1);
+
 	let count = Math.abs(parseInt(args[1]) || 1);
 	let interval = Math.abs(parseInt(args[2]) || 3);
-	knex<ChannelConfig>("ChannelConfig")
-		.update({ CurrentlyRolling: 1 })
-		.then(() => {
-			msg.channel.send(
-				`Rolling ${count} medias with an interval of ${interval} seconds`
-			);
-			logger.info(
-				`Rolling ${count} medias with an interval of ${interval} seconds in channel config ${config.ChannelConfigId}`
-			);
-			SelectRollableMedia(SendMedia, msg, interval, count, 0);
-		});
+	msg.channel.send(
+		`Rolling ${count} medias with an interval of ${interval} seconds`
+	);
+	logger.info(
+		`Rolling ${count} medias with an interval of ${interval} seconds in channel config ${config.ChannelConfigId}`
+	);
+	SelectRollableMedia(SendMedia, msg, interval, count, 0);
 }
 
 function SendMedia(
@@ -245,6 +245,12 @@ function SendMedia(
 	count: number,
 	currentCount: number
 ) {
+	if (typeof media === "undefined") {
+		msg.reply(`No media to roll! Please submit some juicy content first`);
+		SetCurrentlyRolling(config.ChannelConfigId, 0);
+		return;
+	}
+
 	if (media.Url.indexOf("cdn.discordapp.com") != -1) {
 		msg.channel.send({ file: media.Url }).then(sentMsg => {
 			SaveMediaRoll(media, sentMsg as Message, msg);
@@ -259,10 +265,7 @@ function SendMedia(
 			SelectRollableMedia(SendMedia, msg, interval, count, currentCount);
 		}, interval * 1000);
 	else {
-		knex<ChannelConfig>("ChannelConfig")
-			.update("CurrentlyRolling", 0)
-			.where("ChannelConfigId", config.ChannelConfigId)
-			.then(() => logger.info("Finished roll"));
+		SetCurrentlyRolling(config.ChannelConfigId, 0);
 	}
 }
 
@@ -281,6 +284,13 @@ function SaveMediaRoll(media: Media, mediaMsg: Message, originalMsg: Message) {
 	});
 }
 
+function SetCurrentlyRolling(configId: number, integer: number) {
+	knex<ChannelConfig>("ChannelConfig")
+		.update("CurrentlyRolling", integer)
+		.where("ChannelConfigId", configId)
+		.then(() => logger.info("Finished roll"));
+}
+
 function SelectRollableMedia(
 	callback: Function,
 	msg: Message,
@@ -296,7 +306,7 @@ function SelectRollableMedia(
 		.sum("IsUpvote as Points")
 		.where("ConfigId", config.ChannelConfigId)
 		.leftJoin("MediaVote", "Media.MediaId", "MediaVote.MediaId")
-		.groupBy("MediaVote.MediaId")
+		.groupBy("Media.MediaId")
 		.having("Points", ">", config.MinimumPoints)
 		.orHavingRaw("`Points` is null")
 		.then(rows => {
@@ -306,6 +316,7 @@ function SelectRollableMedia(
 			}
 			knex<Media>("Media")
 				.select("Media.MediaId", "Media.Url")
+				.sum("IsUpvote as Points")
 				.leftJoin(
 					knex.raw(
 						"(select `MediaId`, `MediaRollId` from `MediaRoll` order by `MediaRollId` desc limit ?) MediaRoll",
@@ -314,11 +325,28 @@ function SelectRollableMedia(
 					"Media.MediaId",
 					"MediaRoll.MediaId"
 				)
+				.leftJoin("MediaVote", "Media.MediaId", "MediaVote.MediaId")
 				.whereNull("MediaRoll.MediaRollId")
+				.where("ConfigId", config.ChannelConfigId)
+				.groupBy("Media.MediaId")
+				.having("Points", ">", config.MinimumPoints)
+				.orHavingRaw("`Points` is null")
 				.then(rollableMedias => {
-					var media: Media =
+					let pointWeightedMedias = [];
+					rollableMedias.forEach(rollable => {
+						for (
+							let i = 0;
+							i < rollable.Points + config.MinimumPoints * -1;
+							i++
+						) {
+							pointWeightedMedias.push(rollable);
+						}
+					});
+					let media: Media =
 						rollableMedias[
-							Math.floor(Math.random() * rollableMedias.length)
+							Math.floor(
+								Math.random() * pointWeightedMedias.length
+							)
 						];
 					callback(media, msg, interval, count, currentCount);
 				});

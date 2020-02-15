@@ -106,6 +106,7 @@ export class ActionHandler {
 	}
 
 	OnMessage(msg: Message) {
+		if (msg.author.bot) return;
 		ProcessUser(msg.member);
 
 		for (let x in this.comms) {
@@ -115,7 +116,8 @@ export class ActionHandler {
 		}
 	}
 
-	OnReactionAdd(reaction: MessageReaction) {
+	OnReactionAdd(reaction: MessageReaction, user: User) {
+		if (user.bot) return;
 		ProcessUser(reaction.message.member);
 
 		for (let x in this.comms) {
@@ -125,7 +127,8 @@ export class ActionHandler {
 		}
 	}
 
-	OnReactionDelete(reaction: MessageReaction) {
+	OnReactionDelete(reaction: MessageReaction, user: User) {
+		if (user.bot) return;
 		ProcessUser(reaction.message.member);
 
 		for (let x in this.comms) {
