@@ -178,6 +178,9 @@ function GetSettingsFromArgs(chanConfig: ChannelConfig, args: string[]) {
 					if (isNaN(min)) {
 						errors.push(a);
 						errors.push(args[args.indexOf(a) + 1]);
+					} else if (min > 0) {
+						errors.push(a);
+						errors.push("Minimum points must be less than than 1");
 					}
 					chanConfig.MinimumPoints = min;
 					break;
@@ -518,3 +521,9 @@ knex.schema.hasTable("MediaVote").then(exists => {
 		});
 	}
 });
+
+// Cleanup any flags left set
+knex<ChannelConfig>("ChannelConfig")
+	.update("CurrentlyRolling", 0)
+	.where("CurrentlyRolling", 1)
+	.then(() => {});

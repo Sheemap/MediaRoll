@@ -92,3 +92,5 @@ data/
 
 # Dist folder
 dist/
+
+.vscode
