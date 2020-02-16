@@ -4,7 +4,11 @@ A TypeScript Discord bot which allows for saving image attachments and links to 
 
 Uses for this inclue a "memes" channel with extra functionality. MediaRoll will save your memes, and allow others to roll them in another channel. Stumble across that meme you loved a year ago once again!
 
+[Invite them to your server here!](https://discordapp.com/api/oauth2/authorize?client_id=678490376239054859&permissions=116800&scope=bot)
+
 ## Installation
+
+If you'd rather not use my instance, you can run your own! Here is how to setup.
 
 Place your bot token in the MEDIABOTDISCORDTOKEN environment variable
 
