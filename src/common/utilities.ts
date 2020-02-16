@@ -6,18 +6,7 @@ export function GetTimestamp() {
 }
 
 export function GetUserIdFromMessage(msg: Message, callback: Function) {
-	knex<DbServer>("Server")
-		.where("DiscordId", msg.guild.id)
-		.first()
-		.then(serverRow => {
-			knex<DbUser>("User")
-				.where("DiscordId", msg.author.id)
-				.where("ServerId", serverRow.ServerId)
-				.first()
-				.then(userRow => {
-					callback(userRow.UserId);
-				});
-		});
+	GetUserIdFromDiscordId(msg.guild.id, msg.author.id, callback);
 }
 
 export function GetUserIdFromDiscordId(
@@ -34,6 +23,7 @@ export function GetUserIdFromDiscordId(
 				.where("ServerId", serverRow.ServerId)
 				.first()
 				.then(userRow => {
+					if (typeof userRow === "undefined") callback(0);
 					callback(userRow.UserId);
 				});
 		});

@@ -1,5 +1,5 @@
 import knex from "../common/db";
-import { Message, MessageReaction, User } from "discord.js";
+import { Message, MessageReaction, User, TextChannel } from "discord.js";
 import {
 	GetUserIdFromMessage,
 	GetTimestamp,
@@ -273,8 +273,61 @@ function ConfigureNew(msg: Message, args: string[]) {
 								`Updated channel config. ChannelConfig completed!`
 							);
 							msg.reply(
-								`Channel config completed! This channel will now accept the ${prefix}${row.RollCommand} command`
-							);
+								`Channel config completed! This channel will now accept the ${prefix}${row.RollCommand} command.\n\nWould you like to process the past 100 messages to find media? React with '👌' if so.`
+							).then(sentMsg => {
+								let filter = (reaction, user) =>
+									(reaction.emoji.name =
+										"👌" && user.id == msg.author.id);
+								sentMsg = sentMsg as Message;
+								sentMsg
+									.awaitReactions(filter, {
+										max: 1,
+										time: 10000,
+									})
+									.then(collected => {
+										if (collected.size > 0) {
+											msg.channel.send(
+												"Will attempt to import previous media, "
+											);
+											knex<ChannelConfig>("ChannelConfig")
+												.whereNotNull("RollChannelId")
+												.andWhere(
+													"MediaChannelId",
+													msg.channel.id
+												)
+												.orWhere(
+													"RollChannelId",
+													msg.channel.id
+												)
+												.first()
+												.then(configRow => {
+													config = configRow;
+													let mediaChannel = msg.guild.channels.find(
+														x =>
+															x.id ==
+															config.MediaChannelId
+													) as TextChannel;
+													mediaChannel
+														.fetchMessages({
+															limit: 100,
+														})
+														.then(messages => {
+															messages.forEach(
+																message => {
+																	ProcessMessage(
+																		message
+																	);
+																}
+															);
+														});
+												});
+										} else {
+											msg.channel.send(
+												"Timeout reached, not importing previous"
+											);
+										}
+									});
+							});
 						});
 				}
 			});
