@@ -117,8 +117,15 @@ function DeleteMediaVoteFromMessage(
 function AddMediaVoteFromMessage(IsUpvote: boolean, msg: Message, user: User) {
 	GetUserIdFromDiscordId(msg.guild.id, user.id, userId => {
 		knex<MediaRoll>("MediaRoll")
-			.select("MediaId")
-			.where("MessageId", msg.id)
+			.select("MediaRoll.MediaId")
+			.sum("MediaVote.IsUpvote as Points")
+			.leftJoin<MediaVote>(
+				"MediaVote",
+				"MediaRoll.MediaId",
+				"MediaVote.MediaId"
+			)
+			.where("MediaRoll.MessageId", msg.id)
+			.groupBy("MediaRoll.MediaId")
 			.first()
 			.then(media => {
 				if (typeof media === "undefined") {
@@ -127,6 +134,11 @@ function AddMediaVoteFromMessage(IsUpvote: boolean, msg: Message, user: User) {
 					);
 					return;
 				}
+				if (media.Points >= config.MaximumPoints) {
+					logger.info(`${media.MediaId} reached maximum points.`);
+					return;
+				}
+
 				let voteWeight = IsUpvote ? 1 : -1;
 
 				knex<MediaVote>("MediaVote")
