@@ -8,6 +8,7 @@ import {
 import { logger } from "../common/logger";
 
 const DEFAULTPREFIX = "!";
+const MAXROLLSECONDS = 300;
 
 var config: ChannelConfig;
 var prefix: string = DEFAULTPREFIX;
@@ -399,16 +400,24 @@ function RollMedia(msg: Message, args: string[]) {
 		return;
 	}
 
-	SetCurrentlyRolling(config.ChannelConfigId, 1);
-
 	let count = Math.abs(parseInt(args[1]) || 1);
 	let interval = Math.abs(parseInt(args[2]) || 3);
+	if (interval * count > MAXROLLSECONDS) {
+		msg.channel.send(
+			`Rolling this many medias would take longer than the max of ${MAXROLLSECONDS} seconds! Please roll fewer medias, or decrease the interval.`
+		);
+		return;
+	}
+
+	SetCurrentlyRolling(config.ChannelConfigId, 1);
+
 	msg.channel.send(
 		`Rolling ${count} medias with an interval of ${interval} seconds`
 	);
 	logger.info(
 		`Rolling ${count} medias with an interval of ${interval} seconds in channel config ${config.ChannelConfigId}`
 	);
+
 	SelectRollableMedia(SendMedia, msg, interval, count, 0);
 }
 
