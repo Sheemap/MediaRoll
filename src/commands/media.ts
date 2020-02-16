@@ -434,7 +434,10 @@ function SendMedia(
 		return;
 	}
 
-	if (media.Url.indexOf("cdn.discordapp.com") != -1) {
+	if (
+		media.Url.indexOf("cdn.discordapp.com") != -1 ||
+		media.Url.indexOf("i.imgur.com") != -1
+	) {
 		msg.channel.send({ file: media.Url }).then(sent => {
 			let sentMsg = sent as Message;
 			SaveMediaRoll(media, sentMsg, msg);
