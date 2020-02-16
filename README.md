@@ -4,7 +4,7 @@ A TypeScript Discord bot which allows for saving image attachments and links to 
 
 Uses for this inclue a "memes" channel with extra functionality. MediaRoll will save your memes, and allow others to roll them in another channel. Stumble across that meme you loved a year ago once again!
 
-[Invite them to your server here!](https://discordapp.com/api/oauth2/authorize?client_id=678490376239054859&permissions=116800&scope=bot)
+## [Invite them to your server here!](https://discordapp.com/api/oauth2/authorize?client_id=678490376239054859&permissions=116800&scope=bot)
 
 ## Installation
 
@@ -36,48 +36,50 @@ Running this command in an existing channel configuration, will allow you to edi
 
 #### Parameters
 
-`-p <string>`
+These parameters can all be provided with a single command. For example, to setup a channel with a prefix of "~" and a minimum vote threshold of -3, use the command `!media config -p ~ -min -3` then run `!media config` in your roll channel, and you're 100% setup!
+
+`-p <string>` or 
 `--prefix <string>`
 
 This will change the prefix for commands used in these channels.
 
 Default: "!"
 
-`-b <decimal>`
+`-b <decimal>` or 
 `--buffer <decimal>`
 
 This will set the percentage size of the buffer based on the size of the pool.
 
 Default: 0.50
 
-`-max <int>`
+`-max <int>` or 
 `--maximum-points <int>`
 
 This is the maximum amount of points media can receive.
 
 Default: 20
 
-`-min <int>`
+`-min <int>` or 
 `--minimum-points <int>`
 
 This is the threshold where something is removed from the pool. Must be less than 0.
 
 Default: -5
 
-`-u <emoji>`
+`-u <emoji>` or 
 `--upvote-emoji <emoji>`
 This is the emoji used for upvoting media. Must not be an external server's emoji.
 
 Default: 👍
 
-`-d <emoji>`
+`-d <emoji>` or 
 `--downvote-emoji <emoji>`
 
 This is the emoji used for downvoting media. Must not be an external server's emoji.
 
 Default: 👎
 
-`r <string>`
+`-r <string>` or 
 `--roll-command <string>`
 
 This is the command used for rolling media.
