@@ -464,9 +464,6 @@ function RollMedia(msg: Message, args: string[]) {
 
 	SetCurrentlyRolling(config.ChannelConfigId, 1);
 
-	msg.channel.send(
-		`Rolling ${count} medias with an interval of ${interval} seconds`
-	);
 	logger.info(
 		`Rolling ${count} medias with an interval of ${interval} seconds in channel config ${config.ChannelConfigId}`
 	);
