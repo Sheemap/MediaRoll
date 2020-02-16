@@ -24,12 +24,13 @@ export function OnMessage(msg: Message) {
 		.then(configRow => {
 			config = configRow;
 			prefix = config?.Prefix || DEFAULTPREFIX;
+			let rollCommand = config?.RollCommand || "roll";
 			switch (args[0]) {
-				case `${prefix}mediaconfig`:
-					Configure(msg, args);
+				case `${prefix}media`:
+					MediaRoute(msg, args);
 					break;
 
-				case `${prefix}roll`:
+				case `${prefix}${rollCommand}`:
 					RollMedia(msg, args);
 					break;
 
@@ -65,6 +66,26 @@ export function OnReactionDelete(reaction: MessageReaction, user: User) {
 	if (reaction.emoji.toString() === config.DownvoteEmoji) {
 		DeleteMediaVoteFromMessage(false, reaction.message, user);
 		return;
+	}
+}
+
+function MediaRoute(msg: Message, args: string[]) {
+	if (!msg.member.permissions.has("MANAGE_CHANNELS", true)) {
+		msg.reply(
+			"You are not authorized to configure the media channels. You must have a role that has the 'Manage Channels' permission."
+		);
+		return;
+	}
+
+	switch (args[1]) {
+		case `config`:
+		case `configure`:
+			Configure(msg, args);
+			break;
+
+		case `delete`:
+			DeleteConfig(msg);
+			break;
 	}
 }
 
@@ -126,17 +147,41 @@ function AddMediaVoteFromMessage(IsUpvote: boolean, msg: Message, user: User) {
 }
 
 function Configure(msg: Message, args: string[]) {
-	if (!msg.member.permissions.has("MANAGE_CHANNELS", true)) {
-		msg.reply(
-			"You are not authorized to configure the media channels. You must have a role that has the 'Manage Channels' permission."
-		);
-		return;
-	}
 	if (typeof config === "undefined") {
 		ConfigureNew(msg, args);
 	} else {
 		ConfigureExisting(msg, args);
 	}
+}
+
+function DeleteConfig(msg: Message) {
+	msg.reply(
+		`Are you sure you want to delete this config? React with '👌' if so`
+	).then(sentMsg => {
+		let filter = (reaction, user) =>
+			(reaction.emoji.name = "👌" && user.id == msg.author.id);
+		sentMsg = sentMsg as Message;
+		sentMsg
+			.awaitReactions(filter, {
+				max: 1,
+				time: 10000,
+			})
+			.then(collected => {
+				if (collected.size > 0) {
+					knex<ChannelConfig>("ChannelConfig")
+						.where("ChannelConfigId", config.ChannelConfigId)
+						.delete()
+						.then(() => {
+							logger.info(
+								`Discord user ${msg.author.id} deleted ChannelConfig ${config.ChannelConfigId}.`
+							);
+							msg.channel.send("Channel config deleted");
+						});
+				} else {
+					msg.channel.send("Timeout reached, not deleting channel");
+				}
+			});
+	});
 }
 
 function ConfigureExisting(msg: Message, args: string[]) {
@@ -215,7 +260,7 @@ function ConfigureNew(msg: Message, args: string[]) {
 								`Updated channel config. ChannelConfig completed!`
 							);
 							msg.reply(
-								`Channel config completed! This channel will now accept the ${prefix}roll command`
+								`Channel config completed! This channel will now accept the ${prefix}${row.RollCommand} command`
 							);
 						});
 				}
@@ -271,14 +316,29 @@ function GetSettingsFromArgs(chanConfig: ChannelConfig, args: string[]) {
 
 				case "-u":
 				case "--upvote-emoji":
+					if (typeof args[args.indexOf(a) + 1] === "undefined") {
+						errors.push(a);
+					}
 					let upEmoji = args[args.indexOf(a) + 1];
 					chanConfig.UpvoteEmoji = upEmoji;
 					break;
 
 				case "-d":
 				case "--downvote-emoji":
+					if (typeof args[args.indexOf(a) + 1] === "undefined") {
+						errors.push(a);
+					}
 					let downEmoji = args[args.indexOf(a) + 1];
 					chanConfig.DownvoteEmoji = downEmoji;
+					break;
+
+				case "-r":
+				case "--roll-command":
+					if (typeof args[args.indexOf(a) + 1] === "undefined") {
+						errors.push(a);
+					}
+					let rollCommand = args[args.indexOf(a) + 1];
+					chanConfig.RollCommand = rollCommand;
 					break;
 			}
 		} catch {
@@ -309,6 +369,7 @@ function GetSettingsOrDefaultFromArgs(args: string[]) {
 		MinimumPoints: -5,
 		UpvoteEmoji: "👍",
 		DownvoteEmoji: "👎",
+		RollCommand: "roll",
 	};
 	return GetSettingsFromArgs(chanConfig, args);
 }
@@ -353,12 +414,16 @@ function SendMedia(
 	}
 
 	if (media.Url.indexOf("cdn.discordapp.com") != -1) {
-		msg.channel.send({ file: media.Url }).then(sentMsg => {
-			SaveMediaRoll(media, sentMsg as Message, msg);
+		msg.channel.send({ file: media.Url }).then(sent => {
+			let sentMsg = sent as Message;
+			SaveMediaRoll(media, sentMsg, msg);
+			AddVotingEmojisToMessage(sentMsg);
 		});
 	} else {
-		msg.channel.send(media.Url).then(sentMsg => {
+		msg.channel.send(media.Url).then(sent => {
+			let sentMsg = sent as Message;
 			SaveMediaRoll(media, sentMsg as Message, msg);
+			AddVotingEmojisToMessage(sentMsg);
 		});
 	}
 	if (currentCount < count)
@@ -368,6 +433,17 @@ function SendMedia(
 	else {
 		SetCurrentlyRolling(config.ChannelConfigId, 0);
 	}
+}
+
+function AddVotingEmojisToMessage(msg: Message) {
+	let upEmoji = msg.guild.emojis.find(
+		x => x.toString() == config.UpvoteEmoji
+	);
+	let downEmoji = msg.guild.emojis.find(
+		x => x.toString() == config.DownvoteEmoji
+	);
+
+	msg.react(upEmoji).then(() => msg.react(downEmoji));
 }
 
 function SaveMediaRoll(media: Media, mediaMsg: Message, originalMsg: Message) {
@@ -494,6 +570,7 @@ export interface ChannelConfig {
 	MinimumPoints: number;
 	UpvoteEmoji: string;
 	DownvoteEmoji: string;
+	RollCommand: string;
 	CurrentlyRolling: number;
 	CreatedBy: number;
 	DateCreated: number;
@@ -514,6 +591,7 @@ knex.schema.hasTable("ChannelConfig").then(exists => {
 			t.integer("MinimumPoints");
 			t.integer("UpvoteEmoji");
 			t.integer("DownvoteEmoji");
+			t.string("RollCommand");
 			t.integer("CurrentlyRolling");
 			t.integer("CreatedBy");
 			t.integer("DateCreated");
