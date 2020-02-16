@@ -463,8 +463,10 @@ function AddVotingEmojisToMessage(msg: Message) {
 	let downEmoji = msg.guild.emojis.find(
 		x => x.toString() == config.DownvoteEmoji
 	);
+	let trueUpEmoji = upEmoji || config.UpvoteEmoji;
+	let trueDownEmoji = downEmoji || config.DownvoteEmoji;
 
-	msg.react(upEmoji).then(() => msg.react(downEmoji));
+	msg.react(trueUpEmoji).then(() => msg.react(trueDownEmoji));
 }
 
 function SaveMediaRoll(media: Media, mediaMsg: Message, originalMsg: Message) {
