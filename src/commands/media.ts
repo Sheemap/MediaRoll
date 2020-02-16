@@ -703,7 +703,11 @@ knex.schema.hasTable("MediaVote").then(exists => {
 });
 
 // Cleanup any flags left set
-knex<ChannelConfig>("ChannelConfig")
-	.update("CurrentlyRolling", 0)
-	.where("CurrentlyRolling", 1)
-	.then(() => {});
+knex.schema.hasTable("ChannelConfig").then(exists => {
+	if (exists) {
+		knex<ChannelConfig>("ChannelConfig")
+			.update("CurrentlyRolling", 0)
+			.where("CurrentlyRolling", 1)
+			.then(() => {});
+	}
+});
