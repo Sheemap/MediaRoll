@@ -556,8 +556,7 @@ function SaveMediaRoll(media: Media, mediaMsg: Message, originalMsg: Message) {
 function SetCurrentlyRolling(configId: number, durationSeconds: number) {
 	knex<ChannelConfig>("ChannelConfig")
 		.update("CurrentlyRolling", GetTimestamp() + durationSeconds)
-		.where("ChannelConfigId", configId)
-		.then(() => logger.info("Finished roll"));
+		.where("ChannelConfigId", configId);
 }
 
 function SelectRollableMedia(
