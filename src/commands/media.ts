@@ -22,7 +22,7 @@ export function OnMessage(msg: Message) {
 		.andWhere("MediaChannelId", msg.channel.id)
 		.orWhere("RollChannelId", msg.channel.id)
 		.first()
-		.then(configRow => {
+		.then((configRow) => {
 			config = configRow;
 			prefix = config?.Prefix || DEFAULTPREFIX;
 			let rollCommand = config?.RollCommand || "roll";
@@ -95,7 +95,7 @@ function DeleteMediaVoteFromMessage(
 	msg: Message,
 	user: User
 ) {
-	GetUserIdFromDiscordId(msg.guild.id, user.id, userId => {
+	GetUserIdFromDiscordId(msg.guild.id, user.id, (userId) => {
 		let voteWeight = IsUpvote ? 1 : -1;
 		knex<MediaVote>("MediaVote")
 			.select("MediaVoteId")
@@ -104,7 +104,7 @@ function DeleteMediaVoteFromMessage(
 			.andWhere("IsUpvote", voteWeight)
 			.orderBy("MediaVoteId", "desc")
 			.first()
-			.then(mediaVote => {
+			.then((mediaVote) => {
 				if (typeof mediaVote === "undefined") return;
 
 				knex<MediaVote>("MediaVote")
@@ -116,7 +116,7 @@ function DeleteMediaVoteFromMessage(
 }
 
 function AddMediaVoteFromMessage(IsUpvote: boolean, msg: Message, user: User) {
-	GetUserIdFromDiscordId(msg.guild.id, user.id, userId => {
+	GetUserIdFromDiscordId(msg.guild.id, user.id, (userId) => {
 		knex<MediaRoll>("MediaRoll")
 			.select("MediaRoll.MediaId")
 			.sum("MediaVote.IsUpvote as Points")
@@ -128,7 +128,7 @@ function AddMediaVoteFromMessage(IsUpvote: boolean, msg: Message, user: User) {
 			.where("MediaRoll.MessageId", msg.id)
 			.groupBy("MediaRoll.MediaId")
 			.first()
-			.then(media => {
+			.then((media) => {
 				if (typeof media === "undefined") {
 					logger.warn(
 						`Unknown error occured. Tried to add a vote on a non-existant message. MessageId: ${msg.id}, UserId: ${userId}`
@@ -170,7 +170,7 @@ function Configure(msg: Message, args: string[]) {
 function DeleteConfig(msg: Message) {
 	msg.reply(
 		`Are you sure you want to delete this config? React with '👌' if so`
-	).then(sentMsg => {
+	).then((sentMsg) => {
 		let filter = (reaction, user) =>
 			(reaction.emoji.name = "👌" && user.id == msg.author.id);
 		sentMsg = sentMsg as Message;
@@ -179,7 +179,7 @@ function DeleteConfig(msg: Message) {
 				max: 1,
 				time: 10000,
 			})
-			.then(collected => {
+			.then((collected) => {
 				if (collected.size > 0) {
 					knex<ChannelConfig>("ChannelConfig")
 						.where("ChannelConfigId", config.ChannelConfigId)
@@ -198,7 +198,7 @@ function DeleteConfig(msg: Message) {
 }
 
 function ConfigureExisting(msg: Message, args: string[]) {
-	GetUserIdFromMessage(msg, userId => {
+	GetUserIdFromMessage(msg, (userId) => {
 		let chanConfig = GetSettingsFromArgs(config, args);
 		try {
 			chanConfig = chanConfig as string[];
@@ -225,12 +225,12 @@ function ConfigureExisting(msg: Message, args: string[]) {
 }
 
 function ConfigureNew(msg: Message, args: string[]) {
-	GetUserIdFromMessage(msg, userId => {
+	GetUserIdFromMessage(msg, (userId) => {
 		knex<ChannelConfig>("ChannelConfig")
 			.whereNull("RollChannelId")
 			.andWhere("CreatedBy", userId)
 			.first()
-			.then(row => {
+			.then((row) => {
 				if (typeof row === "undefined") {
 					let chanConfig = GetSettingsOrDefaultFromArgs(args);
 
@@ -274,7 +274,7 @@ function ConfigureNew(msg: Message, args: string[]) {
 							);
 							msg.reply(
 								`Channel config completed! This channel will now accept the ${prefix}${row.RollCommand} command.\n\nWould you like to process the past 100 messages to find media? React with '👌' if so.`
-							).then(sentMsg => {
+							).then((sentMsg) => {
 								let filter = (reaction, user) =>
 									(reaction.emoji.name =
 										"👌" && user.id == msg.author.id);
@@ -284,7 +284,7 @@ function ConfigureNew(msg: Message, args: string[]) {
 										max: 1,
 										time: 10000,
 									})
-									.then(collected => {
+									.then((collected) => {
 										if (collected.size > 0) {
 											msg.channel.send(
 												"Will attempt to import previous media, "
@@ -300,10 +300,10 @@ function ConfigureNew(msg: Message, args: string[]) {
 													msg.channel.id
 												)
 												.first()
-												.then(configRow => {
+												.then((configRow) => {
 													config = configRow;
 													let mediaChannel = msg.guild.channels.find(
-														x =>
+														(x) =>
 															x.id ==
 															config.MediaChannelId
 													) as TextChannel;
@@ -311,9 +311,9 @@ function ConfigureNew(msg: Message, args: string[]) {
 														.fetchMessages({
 															limit: 100,
 														})
-														.then(messages => {
+														.then((messages) => {
 															messages.forEach(
-																message => {
+																(message) => {
 																	ProcessMessage(
 																		message
 																	);
@@ -336,7 +336,7 @@ function ConfigureNew(msg: Message, args: string[]) {
 
 function GetSettingsFromArgs(chanConfig: ChannelConfig, args: string[]) {
 	let errors: string[] = [];
-	args.forEach(a => {
+	args.forEach((a) => {
 		try {
 			switch (a) {
 				case "-p":
@@ -488,20 +488,20 @@ function SendMedia(
 		media.Url.indexOf("cdn.discordapp.com") != -1 ||
 		media.Url.indexOf("i.imgur.com") != -1
 	) {
-		msg.channel.send({ file: media.Url }).then(sent => {
+		msg.channel.send({ file: media.Url }).then((sent) => {
 			let sentMsg = sent as Message;
 			SaveMediaRoll(media, sentMsg, msg);
 			AddVotingEmojisToMessage(sentMsg);
 		});
 	} else {
-		msg.channel.send(media.Url).then(sent => {
+		msg.channel.send(media.Url).then((sent) => {
 			let sentMsg = sent as Message;
 			SaveMediaRoll(media, sentMsg as Message, msg);
 			AddVotingEmojisToMessage(sentMsg);
 		});
 	}
 	if (currentCount < count)
-		setTimeout(function() {
+		setTimeout(function () {
 			SelectRollableMedia(SendMedia, msg, interval, count, currentCount);
 		}, interval * 1000);
 	else {
@@ -511,10 +511,10 @@ function SendMedia(
 
 function AddVotingEmojisToMessage(msg: Message) {
 	let upEmoji = msg.guild.emojis.find(
-		x => x.toString() == config.UpvoteEmoji
+		(x) => x.toString() == config.UpvoteEmoji
 	);
 	let downEmoji = msg.guild.emojis.find(
-		x => x.toString() == config.DownvoteEmoji
+		(x) => x.toString() == config.DownvoteEmoji
 	);
 	let trueUpEmoji = upEmoji || config.UpvoteEmoji;
 	let trueDownEmoji = downEmoji || config.DownvoteEmoji;
@@ -523,7 +523,7 @@ function AddVotingEmojisToMessage(msg: Message) {
 }
 
 function SaveMediaRoll(media: Media, mediaMsg: Message, originalMsg: Message) {
-	GetUserIdFromMessage(originalMsg, userId => {
+	GetUserIdFromMessage(originalMsg, (userId) => {
 		knex<MediaRoll>("MediaRoll")
 			.insert({
 				MediaId: media.MediaId,
@@ -562,7 +562,7 @@ function SelectRollableMedia(
 		.groupBy("Media.MediaId")
 		.having("Points", ">", config.MinimumPoints)
 		.orHavingRaw("`Points` is null")
-		.then(rows => {
+		.then((rows) => {
 			bufferCount = Math.round(rows.length * config.BufferPercentage);
 			if (bufferCount >= rows.length) {
 				bufferCount = rows.length - 1;
@@ -584,9 +584,9 @@ function SelectRollableMedia(
 				.groupBy("Media.MediaId")
 				.having("Points", ">", config.MinimumPoints)
 				.orHavingRaw("`Points` is null")
-				.then(rollableMedias => {
+				.then((rollableMedias) => {
 					let pointWeightedMedias = [];
-					rollableMedias.forEach(rollable => {
+					rollableMedias.forEach((rollable) => {
 						for (
 							let i = 0;
 							i < rollable.Points + config.MinimumPoints * -1;
@@ -609,14 +609,14 @@ function SelectRollableMedia(
 function ProcessMessage(msg: Message) {
 	if (msg.channel.id != config?.MediaChannelId) return;
 
-	GetUserIdFromMessage(msg, userId => {
-		msg.attachments.forEach(a => {
+	GetUserIdFromMessage(msg, (userId) => {
+		msg.attachments.forEach((a) => {
 			SaveMedia(a.url, msg.id, userId);
 		});
 	});
 
 	if (msg.content.indexOf("http") != -1) {
-		GetUserIdFromMessage(msg, userId => {
+		GetUserIdFromMessage(msg, (userId) => {
 			SaveMedia(msg.content, msg.id, userId);
 		});
 	}
@@ -653,12 +653,10 @@ export interface ChannelConfig {
 	DateUpdated: number;
 }
 
-knex.schema.hasTable("ChannelConfig").then(exists => {
+knex.schema.hasTable("ChannelConfig").then((exists) => {
 	if (!exists) {
-		return knex.schema.createTable("ChannelConfig", t => {
-			t.increments("ChannelConfigId")
-				.primary()
-				.unique();
+		return knex.schema.createTable("ChannelConfig", (t) => {
+			t.increments("ChannelConfigId").primary().unique();
 			t.string("Prefix", 100);
 			t.string("MediaChannelId");
 			t.string("RollChannelId");
@@ -673,9 +671,7 @@ knex.schema.hasTable("ChannelConfig").then(exists => {
 			t.integer("DateCreated");
 			t.integer("DateUpdated");
 
-			t.foreign("CreatedBy")
-				.references("UserId")
-				.inTable("User");
+			t.foreign("CreatedBy").references("UserId").inTable("User");
 		});
 	}
 });
@@ -689,21 +685,17 @@ export interface Media {
 	DateCreated: number;
 }
 
-knex.schema.hasTable("Media").then(exists => {
+knex.schema.hasTable("Media").then((exists) => {
 	if (!exists) {
-		return knex.schema.createTable("Media", t => {
-			t.increments("MediaId")
-				.primary()
-				.unique();
+		return knex.schema.createTable("Media", (t) => {
+			t.increments("MediaId").primary().unique();
 			t.integer("ConfigId");
 			t.string("Url");
 			t.string("MessageId");
 			t.integer("CreatedBy");
 			t.integer("DateCreated");
 
-			t.foreign("CreatedBy")
-				.references("UserId")
-				.inTable("User");
+			t.foreign("CreatedBy").references("UserId").inTable("User");
 
 			t.foreign("ConfigId")
 				.references("ChannelConfigId")
@@ -720,24 +712,18 @@ export interface MediaRoll {
 	DateCreated: number;
 }
 
-knex.schema.hasTable("MediaRoll").then(exists => {
+knex.schema.hasTable("MediaRoll").then((exists) => {
 	if (!exists) {
-		return knex.schema.createTable("MediaRoll", t => {
-			t.increments("MediaRollId")
-				.primary()
-				.unique();
+		return knex.schema.createTable("MediaRoll", (t) => {
+			t.increments("MediaRollId").primary().unique();
 			t.integer("MediaId");
 			t.string("MessageId");
 			t.integer("CreatedBy");
 			t.integer("DateCreated");
 
-			t.foreign("CreatedBy")
-				.references("UserId")
-				.inTable("User");
+			t.foreign("CreatedBy").references("UserId").inTable("User");
 
-			t.foreign("MediaId")
-				.references("MediaId")
-				.inTable("Media");
+			t.foreign("MediaId").references("MediaId").inTable("Media");
 		});
 	}
 });
@@ -751,35 +737,27 @@ export interface MediaVote {
 	DateCreated: number;
 }
 
-knex.schema.hasTable("MediaVote").then(exists => {
+knex.schema.hasTable("MediaVote").then((exists) => {
 	if (!exists) {
-		return knex.schema.createTable("MediaVote", t => {
-			t.increments("MediaVoteId")
-				.primary()
-				.unique();
+		return knex.schema.createTable("MediaVote", (t) => {
+			t.increments("MediaVoteId").primary().unique();
 			t.integer("MediaId");
 			t.string("MessageId");
 			t.integer("IsUpvote");
 			t.integer("CreatedBy");
 			t.integer("DateCreated");
 
-			t.foreign("CreatedBy")
-				.references("UserId")
-				.inTable("User");
+			t.foreign("CreatedBy").references("UserId").inTable("User");
 
-			t.foreign("MediaId")
-				.references("MediaId")
-				.inTable("Media");
+			t.foreign("MediaId").references("MediaId").inTable("Media");
 
-			t.foreign("MessageId")
-				.references("MessageId")
-				.inTable("MediaRoll");
+			t.foreign("MessageId").references("MessageId").inTable("MediaRoll");
 		});
 	}
 });
 
 // Cleanup any flags left set
-knex.schema.hasTable("ChannelConfig").then(exists => {
+knex.schema.hasTable("ChannelConfig").then((exists) => {
 	if (exists) {
 		knex<ChannelConfig>("ChannelConfig")
 			.update("CurrentlyRolling", 0)
