@@ -448,8 +448,8 @@ function RollMedia(msg: Message, args: string[]) {
 		msg.reply("Rolling is not configured in this channel.");
 		return;
 	}
-	if (config.CurrentlyRolling == 1) {
-		msg.reply("Cant roll twice at once! Wait for the other roll to end.");
+	if (config.CurrentlyRolling > GetTimestamp()) {
+		msg.reply("Can't roll twice at once! Wait for the other roll to end.");
 		return;
 	}
 
@@ -462,7 +462,7 @@ function RollMedia(msg: Message, args: string[]) {
 		return;
 	}
 
-	SetCurrentlyRolling(config.ChannelConfigId, 1);
+	SetCurrentlyRolling(config.ChannelConfigId, interval * (count - 1));
 
 	logger.info(
 		`Rolling ${count} medias with an interval of ${interval} seconds in channel config ${config.ChannelConfigId}`
@@ -537,9 +537,9 @@ function SaveMediaRoll(media: Media, mediaMsg: Message, originalMsg: Message) {
 	});
 }
 
-function SetCurrentlyRolling(configId: number, integer: number) {
+function SetCurrentlyRolling(configId: number, durationSeconds: number) {
 	knex<ChannelConfig>("ChannelConfig")
-		.update("CurrentlyRolling", integer)
+		.update("CurrentlyRolling", GetTimestamp() + durationSeconds)
 		.where("ChannelConfigId", configId)
 		.then(() => logger.info("Finished roll"));
 }
