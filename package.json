@@ -15,7 +15,7 @@
     "discord.js": "^11.5.1",
     "fs": "0.0.1-security",
     "glob": "^7.1.6",
-    "knex": "^0.20.8",
+    "knex": "^0.20.15",
     "path": "^0.12.7",
     "sqlite3": "^4.1.1",
     "typescript-eslint-parser": "^22.0.0",
