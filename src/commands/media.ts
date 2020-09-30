@@ -488,17 +488,33 @@ function SendMedia(
 		media.Url.indexOf("cdn.discordapp.com") != -1 ||
 		media.Url.indexOf("i.imgur.com") != -1
 	) {
-		msg.channel.send({ file: media.Url }).then((sent) => {
-			let sentMsg = sent as Message;
-			SaveMediaRoll(media, sentMsg, msg);
-			AddVotingEmojisToMessage(sentMsg);
-		});
+		msg.channel
+			.send({ file: media.Url })
+			.then((sent) => {
+				let sentMsg = sent as Message;
+				SaveMediaRoll(media, sentMsg, msg);
+				AddVotingEmojisToMessage(sentMsg);
+			})
+			.catch(() => {
+				logger.error(
+					`Encountered error when attempting to send media id '${media.MediaId}'`
+				);
+				currentCount--;
+			});
 	} else {
-		msg.channel.send(media.Url).then((sent) => {
-			let sentMsg = sent as Message;
-			SaveMediaRoll(media, sentMsg as Message, msg);
-			AddVotingEmojisToMessage(sentMsg);
-		});
+		msg.channel
+			.send(media.Url)
+			.then((sent) => {
+				let sentMsg = sent as Message;
+				SaveMediaRoll(media, sentMsg as Message, msg);
+				AddVotingEmojisToMessage(sentMsg);
+			})
+			.catch(() => {
+				logger.error(
+					`Encountered error when attempting to send media id '${media.MediaId}'`
+				);
+				currentCount--;
+			});
 	}
 	if (currentCount < count)
 		setTimeout(function () {
