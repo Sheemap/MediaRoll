@@ -484,45 +484,48 @@ function SendMedia(
 		return;
 	}
 
+	let content;
 	if (
 		media.Url.indexOf("cdn.discordapp.com") != -1 ||
 		media.Url.indexOf("i.imgur.com") != -1
 	) {
-		msg.channel
-			.send({ file: media.Url })
-			.then((sent) => {
-				let sentMsg = sent as Message;
-				SaveMediaRoll(media, sentMsg, msg);
-				AddVotingEmojisToMessage(sentMsg);
-			})
-			.catch(() => {
-				logger.error(
-					`Encountered error when attempting to send media id '${media.MediaId}'`
-				);
-				currentCount--;
-			});
+		content = { file: media.Url };
 	} else {
-		msg.channel
-			.send(media.Url)
-			.then((sent) => {
-				let sentMsg = sent as Message;
-				SaveMediaRoll(media, sentMsg as Message, msg);
-				AddVotingEmojisToMessage(sentMsg);
-			})
-			.catch(() => {
-				logger.error(
-					`Encountered error when attempting to send media id '${media.MediaId}'`
-				);
-				currentCount--;
+		content = media.Url;
+	}
+
+	let success = true;
+	msg.channel
+		.send(content)
+		.then((sent) => {
+			let sentMsg = sent as Message;
+			SaveMediaRoll(media, sentMsg, msg);
+			AddVotingEmojisToMessage(sentMsg);
+		})
+		.catch(() => {
+			logger.error(
+				`Encountered error when attempting to send media id '${media.MediaId}'`
+			);
+			success = false;
+			currentCount--;
+		})
+		.then(() => {
+			TrackMediaError(media, success).then(() => {
+				if (currentCount < count)
+					setTimeout(function () {
+						SelectRollableMedia(
+							SendMedia,
+							msg,
+							interval,
+							count,
+							currentCount
+						);
+					}, interval * 1000);
+				else {
+					SetCurrentlyRolling(config.ChannelConfigId, 0);
+				}
 			});
-	}
-	if (currentCount < count)
-		setTimeout(function () {
-			SelectRollableMedia(SendMedia, msg, interval, count, currentCount);
-		}, interval * 1000);
-	else {
-		SetCurrentlyRolling(config.ChannelConfigId, 0);
-	}
+		});
 }
 
 function AddVotingEmojisToMessage(msg: Message) {
@@ -553,6 +556,17 @@ function SaveMediaRoll(media: Media, mediaMsg: Message, originalMsg: Message) {
 	});
 }
 
+async function TrackMediaError(media: Media, isSuccess: boolean) {
+	const row = await knex<Media>("Media")
+		.select("Media.ErrorCount")
+		.where("MediaId", media.MediaId)
+		.first();
+	let newCount = isSuccess ? 0 : ++row.ErrorCount;
+	await knex<Media>("Media")
+		.update("ErrorCount", newCount)
+		.where("MediaId", media.MediaId);
+}
+
 function SetCurrentlyRolling(configId: number, durationSeconds: number) {
 	knex<ChannelConfig>("ChannelConfig")
 		.update("CurrentlyRolling", GetTimestamp() + durationSeconds)
@@ -573,6 +587,7 @@ function SelectRollableMedia(
 		.select("Media.MediaId")
 		.sum("IsUpvote as Points")
 		.where("ConfigId", config.ChannelConfigId)
+		.where("ErrorCount", "<", 5)
 		.leftJoin("MediaVote", "Media.MediaId", "MediaVote.MediaId")
 		.groupBy("Media.MediaId")
 		.having("Points", ">", config.MinimumPoints)
@@ -596,6 +611,7 @@ function SelectRollableMedia(
 				.leftJoin("MediaVote", "Media.MediaId", "MediaVote.MediaId")
 				.whereNull("MediaRoll.MediaRollId")
 				.where("ConfigId", config.ChannelConfigId)
+				.where("ErrorCount", "<", 5)
 				.groupBy("Media.MediaId")
 				.having("Points", ">", config.MinimumPoints)
 				.orHavingRaw("`Points` is null")
@@ -696,6 +712,7 @@ export interface Media {
 	ConfigId: number;
 	Url: string;
 	MessageId: string;
+	ErrorCount: number;
 	CreatedBy: number;
 	DateCreated: number;
 }
@@ -707,6 +724,7 @@ knex.schema.hasTable("Media").then((exists) => {
 			t.integer("ConfigId");
 			t.string("Url");
 			t.string("MessageId");
+			t.integer("ErrorCount").notNullable().defaultTo(0);
 			t.integer("CreatedBy");
 			t.integer("DateCreated");
 
