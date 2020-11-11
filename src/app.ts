@@ -10,7 +10,7 @@ client.on("ready", () => {
 	logger.info(`Logged in as ${client.user.username}`);
 });
 
-client.on("message", message => {
+client.on("message", (message) => {
 	actionHandler.OnMessage(message);
 });
 
@@ -21,6 +21,8 @@ client.on("messageReactionAdd", (reaction, user) => {
 client.on("messageReactionRemove", (reaction, user) => {
 	actionHandler.OnReactionDelete(reaction, user);
 });
+
+client.on("error", (err) => logger.error(err));
 
 client.login(token);
 
