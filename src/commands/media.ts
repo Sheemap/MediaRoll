@@ -1,9 +1,17 @@
-import knex from "../common/db";
-import { Message, MessageReaction, User, TextChannel } from "discord.js";
+import knex, { DbUser, DbServer } from "../common/db";
+import {
+	Message,
+	MessageReaction,
+	User,
+	TextChannel,
+	RichEmbed,
+} from "discord.js";
 import {
 	GetUserIdFromMessage,
 	GetTimestamp,
 	GetUserIdFromDiscordId,
+	GetChannelIdsFromGuildId,
+	GetDiscordMembersFromName,
 } from "../common/utilities";
 import { logger } from "../common/logger";
 
@@ -17,13 +25,43 @@ export function OnMessage(msg: Message) {
 	let args: string[] = msg.content.split(" ");
 	if (args.length <= 0) return;
 
+	let guildChannels = GetChannelIdsFromGuildId(msg.guild.id).map((x) => x.id);
+
 	knex<ChannelConfig>("ChannelConfig")
 		.whereNotNull("RollChannelId")
-		.andWhere("MediaChannelId", msg.channel.id)
-		.orWhere("RollChannelId", msg.channel.id)
-		.first()
-		.then((configRow) => {
-			config = configRow;
+		.whereIn("MediaChannelId", guildChannels)
+		.orWhereIn("RollChannelId", guildChannels)
+		.then((configs) => {
+			// Handle any commands that use guild-wide custom commands
+			if (args.length > 1) {
+				let rollCommands = configs.map(
+					(x) => `${x.Prefix}${x.RollCommand}`
+				);
+				let allCommands = rollCommands.concat(DEFAULTPREFIX + "media");
+
+				// Bool to determine if we processed the command
+				// This will prevent us from hitting the next command parser and double sending commands
+				let handled = false;
+				if (allCommands.indexOf(args[0]) != -1) {
+					switch (args[1]) {
+						case "score":
+							MediaScore(msg, args, configs);
+							handled = true;
+							break;
+					}
+				}
+
+				if (handled) return;
+			}
+
+			// Handle standard roll within a channel, or the "media" configuration command
+			config = configs
+				.filter(
+					(x) =>
+						x.MediaChannelId == msg.channel.id ||
+						x.RollChannelId == msg.channel.id
+				)
+				.pop();
 			prefix = config?.Prefix || DEFAULTPREFIX;
 			let rollCommand = config?.RollCommand || "roll";
 			switch (args[0]) {
@@ -68,6 +106,145 @@ export function OnReactionDelete(reaction: MessageReaction, user: User) {
 		DeleteMediaVoteFromMessage(false, reaction.message, user);
 		return;
 	}
+}
+
+function MediaScore(msg: Message, args: string[], configs: ChannelConfig[]) {
+	let searchUser = msg.member;
+
+	// Search for the user requested, return error messages if multiple or zero
+	let usernameSearch = args[2];
+	if (typeof usernameSearch !== "undefined") {
+		let foundMems = GetDiscordMembersFromName(msg.guild, usernameSearch);
+		if (foundMems.length > 1) {
+			msg.reply(
+				"Multiple users matched your search! Try searching with their full username"
+			);
+			return;
+		}
+
+		if (foundMems.length == 0) {
+			msg.reply("No user found by that name!");
+			return;
+		}
+
+		searchUser = foundMems[0];
+	}
+
+	// Get all the DB stats
+	// First query gets all the meme point info for user
+	// MediaID grouped with the points for that media
+	knex<Media>("Media")
+		.innerJoin<DbUser>("User", "User.UserId", "Media.CreatedBy")
+		.innerJoin<DbServer>("Server", "Server.ServerId", "User.ServerId")
+		.leftJoin<MediaVote>("MediaVote", "MediaVote.MediaId", "Media.MediaId")
+		.sum("MediaVote.IsUpvote as Points")
+		.where("User.DiscordId", searchUser.id)
+		.andWhere("Server.DiscordId", msg.guild.id)
+		.groupBy("Media.MediaId")
+		.select<MediaPoint[]>("Media.MediaId")
+		.then((medias) => {
+			let totalPoints = medias.reduce((prev, curr) => {
+				return prev + curr.Points;
+			}, 0);
+			let avgPoints = totalPoints / medias.length;
+
+			// Second query gets how many medias this user rolled
+			knex<MediaRoll>("MediaRoll")
+				.count("MediaRoll.MediaRollId as Rolled")
+				.innerJoin<DbUser>("User", "User.UserId", "MediaRoll.CreatedBy")
+				.innerJoin<DbServer>(
+					"Server",
+					"Server.ServerId",
+					"User.ServerId"
+				)
+				.where("User.DiscordId", searchUser.id)
+				.andWhere("Server.DiscordId", msg.guild.id)
+				.groupBy("User.UserId")
+				.select<RolledCount>()
+				.first()
+				.then((rolledCount) => {
+					// Final query gets the amount of up/downvotes this user submitted
+					knex<MediaVote>("MediaVote")
+						.select<VoteTypeCount>(
+							knex.raw(
+								"count(CASE WHEN IsUpvote = 1 THEN 1  ELSE NULL END) as Upvotes, count(CASE WHEN IsUpvote = -1 THEN 1  ELSE NULL END) as Downvotes"
+							)
+						)
+						.innerJoin<DbUser>(
+							"User",
+							"User.UserId",
+							"MediaVote.CreatedBy"
+						)
+						.innerJoin<DbServer>(
+							"Server",
+							"Server.ServerId",
+							"User.ServerId"
+						)
+						.where("User.DiscordId", searchUser.id)
+						.andWhere("Server.DiscordId", msg.guild.id)
+						.first()
+						.then((votes) => {
+							let embed = new RichEmbed({
+								title: `${searchUser.user.username}#${searchUser.user.discriminator}`,
+								description: "Score info",
+								color: searchUser.displayColor,
+								fields: [
+									{
+										name: "Total Points",
+										value: totalPoints?.toString() || "0",
+										inline: true,
+									},
+									{
+										name: "Average Points",
+										value: isNaN(avgPoints)
+											? "0"
+											: avgPoints.toFixed(2).toString(),
+										inline: true,
+									},
+									{
+										name: "Upvotes Given",
+										value: votes?.Upvotes.toString() || "0",
+										inline: true,
+									},
+									{
+										name: "Downvotes Given",
+										value:
+											votes?.Downvotes.toString() || "0",
+										inline: true,
+									},
+									{
+										name: "Total rolled",
+										value:
+											rolledCount?.Rolled.toString() ||
+											"0",
+										inline: true,
+									},
+									{
+										name: "Media Submitted",
+										value: medias?.length.toString() || "0",
+										inline: true,
+									},
+								],
+							});
+
+							msg.channel.send(embed);
+						});
+				});
+		});
+}
+
+interface RolledCount {
+	Rolled: number;
+}
+
+interface VoteTypeCount {
+	Upvotes: number;
+	Downvotes: number;
+}
+
+interface MediaPoint {
+	MediaId: number;
+	Points: number;
 }
 
 function MediaRoute(msg: Message, args: string[]) {
