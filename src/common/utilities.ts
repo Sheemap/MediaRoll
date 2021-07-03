@@ -1,4 +1,5 @@
-import { Message } from "discord.js";
+import { Message, Guild } from "discord.js";
+import client from "../app";
 import knex, { DbUser, DbServer } from "./db";
 
 export function GetTimestamp() {
@@ -17,14 +18,42 @@ export function GetUserIdFromDiscordId(
 	knex<DbServer>("Server")
 		.where("DiscordId", serverDiscordId)
 		.first()
-		.then(serverRow => {
+		.then((serverRow) => {
 			knex<DbUser>("User")
 				.where("DiscordId", userDiscordId)
 				.where("ServerId", serverRow.ServerId)
 				.first()
-				.then(userRow => {
+				.then((userRow) => {
 					if (typeof userRow === "undefined") callback(0);
 					callback(userRow.UserId);
 				});
 		});
+}
+
+export function maxBy<T>(arr: T[], fn: (c: T) => number) {
+	return Math.max(...arr.map(fn));
+}
+
+export function GetChannelIdsFromGuildId(serverDiscordId: string) {
+	let guild = client.guilds.filter((x) => x.id == serverDiscordId).first();
+
+	return guild.channels;
+}
+
+export function GetDiscordMembersFromName(guild: Guild, name: string) {
+	let usernameMembers = guild.members
+		.filter((x) =>
+			x.user.username.toLowerCase().includes(name.toLowerCase())
+		)
+		.map((x) => x);
+
+	if (usernameMembers.length > 0) {
+		return usernameMembers;
+	}
+
+	let displayNameMembers = guild.members
+		.filter((x) => x.displayName.toLowerCase().includes(name.toLowerCase()))
+		.map((x) => x);
+
+	return displayNameMembers;
 }

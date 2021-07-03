@@ -26,4 +26,4 @@ client.on("error", (err) => logger.error(err));
 
 client.login(token);
 
-exports.client = client;
+export default client;
