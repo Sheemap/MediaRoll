@@ -30,6 +30,10 @@ export function GetUserIdFromDiscordId(
 		});
 }
 
+export function maxBy<T>(arr: T[], fn: (c: T) => number) {
+	return Math.max(...arr.map(fn));
+}
+
 export function GetChannelIdsFromGuildId(serverDiscordId: string) {
 	let guild = client.guilds.filter((x) => x.id == serverDiscordId).first();
 
@@ -38,7 +42,9 @@ export function GetChannelIdsFromGuildId(serverDiscordId: string) {
 
 export function GetDiscordMembersFromName(guild: Guild, name: string) {
 	let usernameMembers = guild.members
-		.filter((x) => x.user.username.indexOf(name) != -1)
+		.filter((x) =>
+			x.user.username.toLowerCase().includes(name.toLowerCase())
+		)
 		.map((x) => x);
 
 	if (usernameMembers.length > 0) {
@@ -46,7 +52,7 @@ export function GetDiscordMembersFromName(guild: Guild, name: string) {
 	}
 
 	let displayNameMembers = guild.members
-		.filter((x) => x.displayName.indexOf(name) != -1)
+		.filter((x) => x.displayName.toLowerCase().includes(name.toLowerCase()))
 		.map((x) => x);
 
 	return displayNameMembers;

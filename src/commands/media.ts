@@ -5,8 +5,11 @@ import {
 	User,
 	TextChannel,
 	RichEmbed,
+	GuildMember,
+	Guild,
 } from "discord.js";
 import {
+	maxBy,
 	GetUserIdFromMessage,
 	GetTimestamp,
 	GetUserIdFromDiscordId,
@@ -45,7 +48,12 @@ export function OnMessage(msg: Message) {
 				if (allCommands.indexOf(args[0]) != -1) {
 					switch (args[1]) {
 						case "score":
-							MediaScore(msg, args, configs);
+							MediaScore(msg, args);
+							handled = true;
+							break;
+
+						case "stats":
+							MediaStats(msg, args);
 							handled = true;
 							break;
 					}
@@ -108,7 +116,179 @@ export function OnReactionDelete(reaction: MessageReaction, user: User) {
 	}
 }
 
-function MediaScore(msg: Message, args: string[], configs: ChannelConfig[]) {
+function getUsernameString(guild: Guild, ids: string[]) {
+	let users: GuildMember[] = [];
+	for (let id of ids) {
+		let member = guild.members.get(id);
+		if (typeof member !== "undefined") users.push(member);
+	}
+
+	let found = guild.members.filter((x) => ids.indexOf(x.id) != -1);
+
+	return users.map((x) => x.displayName || x.user.username).join(", ");
+}
+
+function MediaStats(msg: Message, args: string[]) {
+	msg.guild.fetchMembers().then((guild) => {
+		knex<Media>("Media")
+			.innerJoin<DbUser>("User", "User.UserId", "Media.CreatedBy")
+			.innerJoin<DbServer>("Server", "Server.ServerId", "User.ServerId")
+			.leftJoin<MediaVote>(
+				"MediaVote",
+				"MediaVote.MediaId",
+				"Media.MediaId"
+			)
+			.sum("MediaVote.IsUpvote as Points")
+			.count("Media.MediaId as Count")
+			.where("Server.DiscordId", guild.id)
+			.groupBy("User.UserId")
+			.select<MediaUser[]>("User.DisplayName")
+			.then((medias) => {
+				let mostPoints = maxBy(medias, (m) => m.Points);
+				let totalMedia = medias.reduce(
+					(prev, curr) => prev + curr.Count,
+					0
+				);
+				let mostPointUsers = medias.filter(
+					(x) => x.Points == mostPoints
+				);
+
+				let usernameString = mostPointUsers
+					.map((x) => x.DisplayName)
+					.join(", ");
+
+				let highScoreString = `${usernameString} with ${mostPoints}`;
+
+				knex<MediaVote>("MediaVote")
+					.select<VoteUser[]>(
+						knex.raw(
+							"count(CASE WHEN MediaVote.IsUpvote = 1 THEN 1  ELSE NULL END) as Upvotes, count(CASE WHEN MediaVote.IsUpvote = -1 THEN 1  ELSE NULL END) as Downvotes"
+						)
+					)
+					.innerJoin<DbUser>(
+						"User",
+						"User.UserId",
+						"MediaVote.CreatedBy"
+					)
+					.innerJoin<DbServer>(
+						"Server",
+						"Server.ServerId",
+						"User.ServerId"
+					)
+					.where("Server.DiscordId", guild.id)
+					.groupBy("User.UserId")
+					.select<VoteUser[]>("User.DisplayName")
+					.then((users) => {
+						let mostUp = maxBy(users, (v) => v.Upvotes);
+						let mostDown = maxBy(users, (v) => v.Downvotes);
+
+						let upUsers = users.filter((u) => u.Upvotes == mostUp);
+						let downUsers = users.filter(
+							(u) => u.Downvotes == mostDown
+						);
+
+						let upvoteUsernameString = upUsers
+							.map((x) => x.DisplayName)
+							.join(", ");
+						let downvoteUsernameString = downUsers
+							.map((x) => x.DisplayName)
+							.join(", ");
+
+						let upvoteString = `${upvoteUsernameString} with ${mostUp}`;
+
+						let downvoteString = `${downvoteUsernameString} with ${mostDown}`;
+
+						knex<MediaRoll>("MediaRoll")
+							.count("MediaRollId as Count")
+							.innerJoin<DbUser>(
+								"User",
+								"User.UserId",
+								"MediaRoll.CreatedBy"
+							)
+							.innerJoin<DbServer>(
+								"Server",
+								"Server.ServerId",
+								"User.ServerId"
+							)
+							.where("Server.DiscordId", guild.id)
+							.groupBy("User.UserId")
+							.select<RollUser[]>("User.DisplayName")
+							.then((rolls) => {
+								let mostRolls = maxBy(rolls, (r) => r.Count);
+								let totalRolls = rolls.reduce(
+									(prev, curr) => prev + curr.Count,
+									0
+								);
+
+								let rollUsers = rolls.filter(
+									(r) => r.Count == mostRolls
+								);
+
+								let rollUsernameString = rollUsers
+									.map((x) => x.DisplayName)
+									.join(", ");
+
+								let rollString = `${rollUsernameString} with ${mostRolls}`;
+
+								let embed = new RichEmbed({
+									title: `Media Stats`,
+									description: "Stats for the whole guild!",
+									color: 1,
+									fields: [
+										{
+											name: "Total Media",
+											value:
+												totalMedia?.toString() || "0",
+											inline: false,
+										},
+										{
+											name: "Highest Score",
+											value: highScoreString,
+											inline: false,
+										},
+										{
+											name: "Upvotes Given",
+											value: upvoteString,
+											inline: false,
+										},
+										{
+											name: "Downvotes Given",
+											value: downvoteString,
+											inline: false,
+										},
+										{
+											name: "Total rolled",
+											value: rollString,
+											inline: false,
+										},
+									],
+								});
+
+								msg.channel.send(embed);
+							});
+					});
+			});
+	});
+}
+
+interface RollUser {
+	DisplayName: string;
+	Count: number;
+}
+
+interface VoteUser {
+	DisplayName: string;
+	Upvotes: number;
+	Downvotes: number;
+}
+
+interface MediaUser {
+	DisplayName: string;
+	Count: number;
+	Points: number;
+}
+
+function MediaScore(msg: Message, args: string[]) {
 	let searchUser = msg.member;
 
 	// Search for the user requested, return error messages if multiple or zero
