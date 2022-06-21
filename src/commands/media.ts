@@ -5,8 +5,7 @@ import {
 	User,
 	TextChannel,
 	RichEmbed,
-	GuildMember,
-	Guild,
+	Permissions,
 } from "discord.js";
 import {
 	maxBy,
@@ -100,6 +99,15 @@ export function OnReactionAdd(reaction: MessageReaction, user: User) {
 		AddMediaVoteFromMessage(false, reaction.message, user);
 		return;
 	}
+
+	let reactorGuildMember = reaction.message.guild.members.get(user.id);
+	if (reaction.emoji.toString() === '❌' &&
+		reaction.message.channel instanceof TextChannel &&
+		reaction.message.channel.permissionsFor(reactorGuildMember).has(Permissions.FLAGS.MANAGE_MESSAGES, true)) {
+
+		DeleteMedia(reaction.message)
+		return;
+	}
 }
 
 export function OnReactionDelete(reaction: MessageReaction, user: User) {
@@ -116,19 +124,7 @@ export function OnReactionDelete(reaction: MessageReaction, user: User) {
 	}
 }
 
-function getUsernameString(guild: Guild, ids: string[]) {
-	let users: GuildMember[] = [];
-	for (let id of ids) {
-		let member = guild.members.get(id);
-		if (typeof member !== "undefined") users.push(member);
-	}
-
-	let found = guild.members.filter((x) => ids.indexOf(x.id) != -1);
-
-	return users.map((x) => x.displayName || x.user.username).join(", ");
-}
-
-function MediaStats(msg: Message, args: string[]) {
+function MediaStats(msg: Message, _: string[]) {
 	msg.guild.fetchMembers().then((guild) => {
 		knex<Media>("Media")
 			.innerJoin<DbUser>("User", "User.UserId", "Media.CreatedBy")
@@ -141,6 +137,7 @@ function MediaStats(msg: Message, args: string[]) {
 			.sum("MediaVote.IsUpvote as Points")
 			.count("Media.MediaId as Count")
 			.where("Server.DiscordId", guild.id)
+			.whereNull("Media.DateDeleted")
 			.groupBy("User.UserId")
 			.select<MediaUser[]>("User.DisplayName")
 			.then((medias) => {
@@ -215,10 +212,6 @@ function MediaStats(msg: Message, args: string[]) {
 							.select<RollUser[]>("User.DisplayName")
 							.then((rolls) => {
 								let mostRolls = maxBy(rolls, (r) => r.Count);
-								let totalRolls = rolls.reduce(
-									(prev, curr) => prev + curr.Count,
-									0
-								);
 
 								let rollUsers = rolls.filter(
 									(r) => r.Count == mostRolls
@@ -319,6 +312,7 @@ function MediaScore(msg: Message, args: string[]) {
 		.leftJoin<MediaVote>("MediaVote", "MediaVote.MediaId", "Media.MediaId")
 		.sum("MediaVote.IsUpvote as Points")
 		.where("User.DiscordId", searchUser.id)
+		.whereNull("Media.DateDeleted")
 		.andWhere("Server.DiscordId", msg.guild.id)
 		.groupBy("Media.MediaId")
 		.select<MediaPoint[]>("Media.MediaId")
@@ -514,6 +508,34 @@ function AddMediaVoteFromMessage(IsUpvote: boolean, msg: Message, user: User) {
 					});
 			});
 	});
+}
+
+function DeleteMedia(msg: Message){
+	logger.info(`Deleting media from messageId: ${msg.id}`);
+	try{
+		msg.delete().catch(() => {throw new Error()});
+	}catch (e){
+		logger.warning(`Failed to delete message messageId: ${msg.id}`);
+	}
+
+	knex<MediaRoll>("MediaRoll")
+		.select("MediaRoll.MediaId")
+		.where("MediaRoll.MessageId", msg.id)
+		.first()
+		.then((media) => {
+			if (typeof media === "undefined") {
+				return;
+			}
+
+			knex<Media>("Media")
+				.where("MediaId", media.MediaId)
+				.update({
+					DateDeleted: GetTimestamp(),
+				})
+				.then(() => {
+					logger.info(`Deleted MediaId: ${media.MediaId}`);
+				});
+		});
 }
 
 function Configure(msg: Message, args: string[]) {
@@ -895,7 +917,9 @@ function AddVotingEmojisToMessage(msg: Message) {
 	let trueUpEmoji = upEmoji || config.UpvoteEmoji;
 	let trueDownEmoji = downEmoji || config.DownvoteEmoji;
 
-	msg.react(trueUpEmoji).then(() => msg.react(trueDownEmoji));
+	msg.react(trueUpEmoji).then(() => msg.react(trueDownEmoji)).catch(() => {
+		logger.error(`Encountered error when attempting to react to message '${msg.id}'`);
+	});
 }
 
 function SaveMediaRoll(media: Media, mediaMsg: Message, originalMsg: Message) {
@@ -945,6 +969,7 @@ function SelectRollableMedia(
 		.sum("IsUpvote as Points")
 		.where("ConfigId", config.ChannelConfigId)
 		.where("ErrorCount", "<", 5)
+		.whereNull("DateDeleted")
 		.leftJoin("MediaVote", "Media.MediaId", "MediaVote.MediaId")
 		.groupBy("Media.MediaId")
 		.having("Points", ">", config.MinimumPoints)
@@ -969,6 +994,7 @@ function SelectRollableMedia(
 				.whereNull("MediaRoll.MediaRollId")
 				.where("ConfigId", config.ChannelConfigId)
 				.where("ErrorCount", "<", 5)
+				.whereNull("DateDeleted")
 				.groupBy("Media.MediaId")
 				.having("Points", ">", config.MinimumPoints)
 				.orHavingRaw("`Points` is null")
@@ -1018,6 +1044,7 @@ function SaveMedia(url: string, messageId: string, userId: number) {
 			MessageId: messageId,
 			CreatedBy: userId,
 			DateCreated: GetTimestamp(),
+			DateDeleted: null,
 		})
 		.then(() => logger.info(`Saved media sent by userId ${userId}`));
 }
@@ -1072,6 +1099,7 @@ export interface Media {
 	ErrorCount: number;
 	CreatedBy: number;
 	DateCreated: number;
+	DateDeleted: number;
 }
 
 knex.schema.hasTable("Media").then((exists) => {
@@ -1084,6 +1112,7 @@ knex.schema.hasTable("Media").then((exists) => {
 			t.integer("ErrorCount").notNullable().defaultTo(0);
 			t.integer("CreatedBy");
 			t.integer("DateCreated");
+			t.integer("DateDeleted").nullable();
 
 			t.foreign("CreatedBy").references("UserId").inTable("User");
 
