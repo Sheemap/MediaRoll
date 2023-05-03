@@ -16,9 +16,9 @@
 		"discord.js": "^11.6.4",
 		"fs": "0.0.1-security",
 		"glob": "^7.1.7",
-		"knex": "^0.20.15",
+		"knex": "^2.4.2",
 		"path": "^0.12.7",
-		"sqlite3": "^5.0.2",
+		"sqlite3": "^5.1.5",
 		"typescript-eslint-parser": "^22.0.0",
 		"winston": "^3.3.3",
 		"winston-daily-rotate-file": "^4.5.5"
