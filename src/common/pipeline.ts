@@ -5,12 +5,12 @@ import * as path from "path";
 import knex, { DbServer, DbUser } from "./db";
 
 function ProcessUser(guildMember: GuildMember) {
-	knex<DbServer>("Server")
+	knex("Server")
 		.where("DiscordId", guildMember.guild.id)
 		.first()
-		.then(serverRow => {
+		.then((serverRow: DbServer) => {
 			if (typeof serverRow === "undefined") {
-				knex<DbServer>("Server")
+				knex("Server")
 					.insert({
 						DiscordId: guildMember.guild.id,
 						Name: guildMember.guild.name,
@@ -19,7 +19,7 @@ function ProcessUser(guildMember: GuildMember) {
 						logger.info(
 							`Inserted new server: ${guildMember.guild.name}`
 						);
-						knex<DbUser>("User")
+						knex("User")
 							.insert({
 								DiscordId: guildMember.id,
 								UserName: guildMember.user.username,
@@ -34,7 +34,7 @@ function ProcessUser(guildMember: GuildMember) {
 					});
 			} else {
 				if (serverRow.Name != guildMember.guild.name) {
-					knex<DbServer>("Server")
+					knex("Server")
 						.where("ServerId", serverRow.ServerId)
 						.update({
 							Name: guildMember.guild.name,
@@ -45,13 +45,13 @@ function ProcessUser(guildMember: GuildMember) {
 							)
 						);
 				}
-				knex<DbUser>("User")
+				knex("User")
 					.where("DiscordId", guildMember.user.id)
 					.where("ServerId", serverRow.ServerId)
 					.first()
-					.then(userRow => {
+					.then((userRow: DbUser) => {
 						if (typeof userRow === "undefined") {
-							knex<DbUser>("User")
+							knex("User")
 								.insert({
 									DiscordId: guildMember.id,
 									UserName: guildMember.user.username,
@@ -67,7 +67,7 @@ function ProcessUser(guildMember: GuildMember) {
 							userRow.DisplayName != guildMember.displayName ||
 							userRow.UserName != guildMember.user.username
 						) {
-							knex<DbUser>("User")
+							knex("User")
 								.where("UserId", userRow.UserId)
 								.update({
 									DisplayName: guildMember.displayName,

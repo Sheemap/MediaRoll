@@ -29,7 +29,7 @@ export function OnMessage(msg: Message) {
 
 	let guildChannels = GetChannelIdsFromGuildId(msg.guild.id).map((x) => x.id);
 
-	knex<ChannelConfig>("ChannelConfig")
+	knex("ChannelConfig")
 		.whereNotNull("RollChannelId")
 		.whereIn("MediaChannelId", guildChannels)
 		.orWhereIn("RollChannelId", guildChannels)
@@ -126,10 +126,10 @@ export function OnReactionDelete(reaction: MessageReaction, user: User) {
 
 function MediaStats(msg: Message, _: string[]) {
 	msg.guild.fetchMembers().then((guild) => {
-		knex<Media>("Media")
-			.innerJoin<DbUser>("User", "User.UserId", "Media.CreatedBy")
-			.innerJoin<DbServer>("Server", "Server.ServerId", "User.ServerId")
-			.leftJoin<MediaVote>(
+		knex("Media")
+			.innerJoin("User", "User.UserId", "Media.CreatedBy")
+			.innerJoin("Server", "Server.ServerId", "User.ServerId")
+			.leftJoin(
 				"MediaVote",
 				"MediaVote.MediaId",
 				"Media.MediaId"
@@ -139,9 +139,9 @@ function MediaStats(msg: Message, _: string[]) {
 			.where("Server.DiscordId", guild.id)
 			.whereNull("Media.DateDeleted")
 			.groupBy("User.UserId")
-			.select<MediaUser[]>("User.DisplayName")
+			.select("User.DisplayName")
 			.then((medias) => {
-				let mostPoints = maxBy(medias, (m) => m.Points);
+				let mostPoints = maxBy(medias, (m: MediaUser) => m.Points);
 				let totalMedia = medias.reduce(
 					(prev, curr) => prev + curr.Count,
 					0
@@ -156,28 +156,28 @@ function MediaStats(msg: Message, _: string[]) {
 
 				let highScoreString = `${usernameString} with ${mostPoints}`;
 
-				knex<MediaVote>("MediaVote")
-					.select<VoteUser[]>(
+				knex("MediaVote")
+					.select(
 						knex.raw(
 							"count(CASE WHEN MediaVote.IsUpvote = 1 THEN 1  ELSE NULL END) as Upvotes, count(CASE WHEN MediaVote.IsUpvote = -1 THEN 1  ELSE NULL END) as Downvotes"
 						)
 					)
-					.innerJoin<DbUser>(
+					.innerJoin(
 						"User",
 						"User.UserId",
 						"MediaVote.CreatedBy"
 					)
-					.innerJoin<DbServer>(
+					.innerJoin(
 						"Server",
 						"Server.ServerId",
 						"User.ServerId"
 					)
 					.where("Server.DiscordId", guild.id)
 					.groupBy("User.UserId")
-					.select<VoteUser[]>("User.DisplayName")
+					.select("User.DisplayName")
 					.then((users) => {
-						let mostUp = maxBy(users, (v) => v.Upvotes);
-						let mostDown = maxBy(users, (v) => v.Downvotes);
+						let mostUp = maxBy(users, (v: VoteUser) => v.Upvotes);
+						let mostDown = maxBy(users, (v: VoteUser) => v.Downvotes);
 
 						let upUsers = users.filter((u) => u.Upvotes == mostUp);
 						let downUsers = users.filter(
@@ -195,23 +195,23 @@ function MediaStats(msg: Message, _: string[]) {
 
 						let downvoteString = `${downvoteUsernameString} with ${mostDown}`;
 
-						knex<MediaRoll>("MediaRoll")
+						knex("MediaRoll")
 							.count("MediaRollId as Count")
-							.innerJoin<DbUser>(
+							.innerJoin(
 								"User",
 								"User.UserId",
 								"MediaRoll.CreatedBy"
 							)
-							.innerJoin<DbServer>(
+							.innerJoin(
 								"Server",
 								"Server.ServerId",
 								"User.ServerId"
 							)
 							.where("Server.DiscordId", guild.id)
 							.groupBy("User.UserId")
-							.select<RollUser[]>("User.DisplayName")
+							.select("User.DisplayName")
 							.then((rolls) => {
-								let mostRolls = maxBy(rolls, (r) => r.Count);
+								let mostRolls = maxBy(rolls, (r: RollUser) => r.Count);
 
 								let rollUsers = rolls.filter(
 									(r) => r.Count == mostRolls
@@ -306,16 +306,16 @@ function MediaScore(msg: Message, args: string[]) {
 	// Get all the DB stats
 	// First query gets all the meme point info for user
 	// MediaID grouped with the points for that media
-	knex<Media>("Media")
-		.innerJoin<DbUser>("User", "User.UserId", "Media.CreatedBy")
-		.innerJoin<DbServer>("Server", "Server.ServerId", "User.ServerId")
-		.leftJoin<MediaVote>("MediaVote", "MediaVote.MediaId", "Media.MediaId")
+	knex("Media")
+		.innerJoin("User", "User.UserId", "Media.CreatedBy")
+		.innerJoin("Server", "Server.ServerId", "User.ServerId")
+		.leftJoin("MediaVote", "MediaVote.MediaId", "Media.MediaId")
 		.sum("MediaVote.IsUpvote as Points")
 		.where("User.DiscordId", searchUser.id)
 		.whereNull("Media.DateDeleted")
 		.andWhere("Server.DiscordId", msg.guild.id)
 		.groupBy("Media.MediaId")
-		.select<MediaPoint[]>("Media.MediaId")
+		.select("Media.MediaId")
 		.then((medias) => {
 			let totalPoints = medias.reduce((prev, curr) => {
 				return prev + curr.Points;
@@ -323,10 +323,10 @@ function MediaScore(msg: Message, args: string[]) {
 			let avgPoints = totalPoints / medias.length;
 
 			// Second query gets how many medias this user rolled
-			knex<MediaRoll>("MediaRoll")
+			knex("MediaRoll")
 				.count("MediaRoll.MediaRollId as Rolled")
-				.innerJoin<DbUser>("User", "User.UserId", "MediaRoll.CreatedBy")
-				.innerJoin<DbServer>(
+				.innerJoin("User", "User.UserId", "MediaRoll.CreatedBy")
+				.innerJoin(
 					"Server",
 					"Server.ServerId",
 					"User.ServerId"
@@ -334,22 +334,22 @@ function MediaScore(msg: Message, args: string[]) {
 				.where("User.DiscordId", searchUser.id)
 				.andWhere("Server.DiscordId", msg.guild.id)
 				.groupBy("User.UserId")
-				.select<RolledCount>()
+				.select()
 				.first()
 				.then((rolledCount) => {
 					// Final query gets the amount of up/downvotes this user submitted
-					knex<MediaVote>("MediaVote")
-						.select<VoteTypeCount>(
+					knex("MediaVote")
+						.select(
 							knex.raw(
 								"count(CASE WHEN IsUpvote = 1 THEN 1  ELSE NULL END) as Upvotes, count(CASE WHEN IsUpvote = -1 THEN 1  ELSE NULL END) as Downvotes"
 							)
 						)
-						.innerJoin<DbUser>(
+						.innerJoin(
 							"User",
 							"User.UserId",
 							"MediaVote.CreatedBy"
 						)
-						.innerJoin<DbServer>(
+						.innerJoin(
 							"Server",
 							"Server.ServerId",
 							"User.ServerId"
@@ -448,7 +448,7 @@ function DeleteMediaVoteFromMessage(
 ) {
 	GetUserIdFromDiscordId(msg.guild.id, user.id, (userId) => {
 		let voteWeight = IsUpvote ? 1 : -1;
-		knex<MediaVote>("MediaVote")
+		knex("MediaVote")
 			.select("MediaVoteId")
 			.where("MessageId", msg.id)
 			.andWhere("CreatedBy", userId)
@@ -458,7 +458,7 @@ function DeleteMediaVoteFromMessage(
 			.then((mediaVote) => {
 				if (typeof mediaVote === "undefined") return;
 
-				knex<MediaVote>("MediaVote")
+				knex("MediaVote")
 					.where("MediaVoteId", mediaVote.MediaVoteId)
 					.delete()
 					.then(() => {});
@@ -468,10 +468,10 @@ function DeleteMediaVoteFromMessage(
 
 function AddMediaVoteFromMessage(IsUpvote: boolean, msg: Message, user: User) {
 	GetUserIdFromDiscordId(msg.guild.id, user.id, (userId) => {
-		knex<MediaRoll>("MediaRoll")
+		knex("MediaRoll")
 			.select("MediaRoll.MediaId")
 			.sum("MediaVote.IsUpvote as Points")
-			.leftJoin<MediaVote>(
+			.leftJoin(
 				"MediaVote",
 				"MediaRoll.MediaId",
 				"MediaVote.MediaId"
@@ -493,7 +493,7 @@ function AddMediaVoteFromMessage(IsUpvote: boolean, msg: Message, user: User) {
 
 				let voteWeight = IsUpvote ? 1 : -1;
 
-				knex<MediaVote>("MediaVote")
+				knex("MediaVote")
 					.insert({
 						MediaId: media.MediaId,
 						MessageId: msg.id,
@@ -518,7 +518,7 @@ function DeleteMedia(msg: Message){
 		logger.warning(`Failed to delete message messageId: ${msg.id}`);
 	}
 
-	knex<MediaRoll>("MediaRoll")
+	knex("MediaRoll")
 		.select("MediaRoll.MediaId")
 		.where("MediaRoll.MessageId", msg.id)
 		.first()
@@ -527,7 +527,7 @@ function DeleteMedia(msg: Message){
 				return;
 			}
 
-			knex<Media>("Media")
+			knex("Media")
 				.where("MediaId", media.MediaId)
 				.update({
 					DateDeleted: GetTimestamp(),
@@ -560,7 +560,7 @@ function DeleteConfig(msg: Message) {
 			})
 			.then((collected) => {
 				if (collected.size > 0) {
-					knex<ChannelConfig>("ChannelConfig")
+					knex("ChannelConfig")
 						.where("ChannelConfigId", config.ChannelConfigId)
 						.delete()
 						.then(() => {
@@ -591,7 +591,7 @@ function ConfigureExisting(msg: Message, args: string[]) {
 		let channelConfig = chanConfig as ChannelConfig;
 		channelConfig.DateUpdated = GetTimestamp();
 
-		knex<ChannelConfig>("ChannelConfig")
+		knex("ChannelConfig")
 			.update(channelConfig)
 			.where("ChannelConfigId", channelConfig.ChannelConfigId)
 			.then(() => {
@@ -605,7 +605,7 @@ function ConfigureExisting(msg: Message, args: string[]) {
 
 function ConfigureNew(msg: Message, args: string[]) {
 	GetUserIdFromMessage(msg, (userId) => {
-		knex<ChannelConfig>("ChannelConfig")
+		knex("ChannelConfig")
 			.whereNull("RollChannelId")
 			.andWhere("CreatedBy", userId)
 			.first()
@@ -630,7 +630,7 @@ function ConfigureNew(msg: Message, args: string[]) {
 					chanConfig.CreatedBy = userId;
 					chanConfig.DateCreated = GetTimestamp();
 					chanConfig.DateUpdated = GetTimestamp();
-					knex<ChannelConfig>("ChannelConfig")
+					knex("ChannelConfig")
 						.insert(chanConfig)
 						.then(() => {
 							logger.info(
@@ -641,7 +641,7 @@ function ConfigureNew(msg: Message, args: string[]) {
 							);
 						});
 				} else {
-					knex<ChannelConfig>("ChannelConfig")
+					knex("ChannelConfig")
 						.update({
 							RollChannelId: msg.channel.id,
 							DateUpdated: GetTimestamp(),
@@ -668,7 +668,7 @@ function ConfigureNew(msg: Message, args: string[]) {
 											msg.channel.send(
 												"Will attempt to import previous media, "
 											);
-											knex<ChannelConfig>("ChannelConfig")
+											knex("ChannelConfig")
 												.whereNotNull("RollChannelId")
 												.andWhere(
 													"MediaChannelId",
@@ -924,7 +924,7 @@ function AddVotingEmojisToMessage(msg: Message) {
 
 function SaveMediaRoll(media: Media, mediaMsg: Message, originalMsg: Message) {
 	GetUserIdFromMessage(originalMsg, (userId) => {
-		knex<MediaRoll>("MediaRoll")
+		knex("MediaRoll")
 			.insert({
 				MediaId: media.MediaId,
 				MessageId: mediaMsg.id,
@@ -938,18 +938,18 @@ function SaveMediaRoll(media: Media, mediaMsg: Message, originalMsg: Message) {
 }
 
 async function TrackMediaError(media: Media, isSuccess: boolean) {
-	const row = await knex<Media>("Media")
+	const row = await knex("Media")
 		.select("Media.ErrorCount")
 		.where("MediaId", media.MediaId)
 		.first();
 	let newCount = isSuccess ? 0 : ++row.ErrorCount;
-	await knex<Media>("Media")
+	await knex("Media")
 		.update("ErrorCount", newCount)
 		.where("MediaId", media.MediaId);
 }
 
 function SetCurrentlyRolling(configId: number, durationSeconds: number) {
-	knex<ChannelConfig>("ChannelConfig")
+	knex("ChannelConfig")
 		.update("CurrentlyRolling", GetTimestamp() + durationSeconds)
 		.where("ChannelConfigId", configId);
 }
@@ -964,7 +964,7 @@ function SelectRollableMedia(
 	let bufferCount = 0;
 	currentCount++;
 
-	knex<Media>("Media")
+	knex("Media")
 		.select("Media.MediaId")
 		.sum("IsUpvote as Points")
 		.where("ConfigId", config.ChannelConfigId)
@@ -979,7 +979,7 @@ function SelectRollableMedia(
 			if (bufferCount >= rows.length) {
 				bufferCount = rows.length - 1;
 			}
-			knex<Media>("Media")
+			knex("Media")
 				.select("Media.MediaId", "Media.Url")
 				.sum("IsUpvote as Points")
 				.leftJoin(
@@ -1037,7 +1037,7 @@ function ProcessMessage(msg: Message) {
 }
 
 function SaveMedia(url: string, messageId: string, userId: number) {
-	knex<Media>("Media")
+	knex("Media")
 		.insert({
 			ConfigId: config.ChannelConfigId,
 			Url: url,
@@ -1178,7 +1178,7 @@ knex.schema.hasTable("MediaVote").then((exists) => {
 // Cleanup any flags left set
 knex.schema.hasTable("ChannelConfig").then((exists) => {
 	if (exists) {
-		knex<ChannelConfig>("ChannelConfig")
+		knex("ChannelConfig")
 			.update("CurrentlyRolling", 0)
 			.where("CurrentlyRolling", 1)
 			.then(() => {});

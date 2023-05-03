@@ -1,5 +1,4 @@
 import { logger } from "./logger";
-import * as knexjs from "knex";
 import * as fs from "fs";
 
 const sqliteFileLocation = process.env.SQLITEDBFOLDER || "./data";
@@ -8,7 +7,7 @@ if (!fs.existsSync(sqliteFileLocation)) {
 	fs.mkdirSync(sqliteFileLocation);
 }
 
-const knex = knexjs({
+const knex = require('knex')({
 	client: "sqlite3",
 	connection: {
 		filename: sqliteFileLocation + "/sqlite.db",

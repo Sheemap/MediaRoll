@@ -15,15 +15,15 @@ export function GetUserIdFromDiscordId(
 	userDiscordId: string,
 	callback: Function
 ) {
-	knex<DbServer>("Server")
+	knex("Server")
 		.where("DiscordId", serverDiscordId)
 		.first()
-		.then((serverRow) => {
-			knex<DbUser>("User")
+		.then((serverRow: DbServer) => {
+			knex("User")
 				.where("DiscordId", userDiscordId)
 				.where("ServerId", serverRow.ServerId)
 				.first()
-				.then((userRow) => {
+				.then((userRow: DbUser) => {
 					if (typeof userRow === "undefined") callback(0);
 					callback(userRow.UserId);
 				});
